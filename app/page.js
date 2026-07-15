@@ -402,4 +402,169 @@ export default function Home() {
                 {item.photos?.[0] ? (
                   <img src={item.photos[0]} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, background: colors.bgAlt }} />
                 ) : (
-                  <div style={{ width: 44, height: 44,
+                  <div style={{ width: 44, height: 44, background: colors.bgAlt, borderRadius: 8 }} />
+                )}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{item.name || 'Unidentified item'}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: colors.accent }}>{item.box}</div>
+                  <div style={{ fontSize: 10, color: colors.inkFaint, textTransform: 'uppercase' }}>location</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {openItem && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: 640, maxHeight: '88vh', overflowY: 'auto', borderRadius: '24px 24px 0 0', padding: 0 }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '24px 24px 0 0' }}>
+              <button
+                onClick={() => { setOpenItem(null); setNotice(null); }}
+                style={{ background: 'transparent', border: 'none', color: '#fff', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                &larr; Back
+              </button>
+            </div>
+
+            <div style={{ padding: 20 }}>
+              {openItem.photos?.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto' }}>
+                  {openItem.photos.map((p, i) => (
+                    <img key={i} src={p} alt="" style={{ height: 180, borderRadius: 16, objectFit: 'cover', flex: openItem.photos.length === 1 ? '1 1 100%' : '1 1 0' }} />
+                  ))}
+                </div>
+              )}
+
+              <h3 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px' }}>{openItem.name || 'Unidentified item'}</h3>
+              <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 16 }}>
+                Box: {openItem.box} &middot; {openItem.category || 'uncategorised'}
+              </p>
+
+              {openItem.estimate ? (
+                <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 4 }}>Estimated resale range</div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: colors.success }}>
+                    ${openItem.estimate.low} &ndash; ${openItem.estimate.high} {openItem.estimate.currency}
+                  </div>
+                  {openItem.estimate.newPrice && (
+                    <div style={{ fontSize: 13, color: colors.inkSoft, marginTop: 8, fontWeight: 600 }}>New today (RRP): ~${openItem.estimate.newPrice} {openItem.estimate.currency}</div>
+                  )}
+                  {openItem.estimate.reasoning && (
+                    <div style={{ fontSize: 13, color: colors.inkSoft, marginTop: 10, lineHeight: 1.55 }}>{openItem.estimate.reasoning}</div>
+                  )}
+
+                  {openItem.listing && (
+                    <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginTop: 14 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>{openItem.listing.title}</div>
+                      <div style={{ fontSize: 13.5, color: colors.inkSoft, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{openItem.listing.description}</div>
+                    </div>
+                  )}
+
+                  {openItem.status !== 'listed' && openItem.status !== 'sold' && (
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{ fontSize: 12, color: colors.inkFaint, marginBottom: 8, fontWeight: 600 }}>Ready to sell? Pick a price:</div>
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                        <button onClick={() => confirmListing(openItem, openItem.estimate.low)} style={priceChoiceBtn}>${openItem.estimate.low}<div style={priceChoiceLabel}>Min</div></button>
+                        <button onClick={() => confirmListing(openItem, Math.round((openItem.estimate.low + openItem.estimate.high) / 2))} style={{ ...priceChoiceBtn, background: colors.ink, color: '#fff' }}>${Math.round((openItem.estimate.low + openItem.estimate.high) / 2)}<div style={{ ...priceChoiceLabel, color: 'rgba(255,255,255,0.7)' }}>Mid</div></button>
+                        <button onClick={() => confirmListing(openItem, openItem.estimate.high)} style={priceChoiceBtn}>${openItem.estimate.high}<div style={priceChoiceLabel}>Max</div></button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input
+                          type="number"
+                          placeholder="Or set your own price"
+                          value={askingPrice}
+                          onChange={(e) => setAskingPrice(e.target.value)}
+                          style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+                        />
+                        <button
+                          onClick={() => { if (askingPrice) confirmListing(openItem, Number(askingPrice)); }}
+                          style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px' }}
+                        >
+                          Set
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                  <button disabled={valuationLoading} onClick={() => runValuation(openItem, 'deep')} style={primaryBtn}>
+                    {valuationLoading ? 'Working...' : 'Deep Dive'}
+                  </button>
+                  <button disabled={valuationLoading} onClick={() => runValuation(openItem, 'quick')} style={outlineBtn}>
+                    Quick Valuation
+                  </button>
+                </div>
+              )}
+
+              {openItem.status === 'listed' && openItem.listing && (
+                <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 10 }}>Sell on Facebook Marketplace</div>
+                  <p style={{ fontSize: 12, color: colors.inkFaint, margin: '0 0 10px' }}>Copy each field into the matching box on Facebook's create-listing form.</p>
+
+                  {['title', 'price', 'description'].map((field) => (
+                    <div key={field} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 2 }}>{field}</div>
+                        <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                          {field === 'price' ? `$${openItem.listing.price ?? ''}` : openItem.listing[field]}
+                        </div>
+                      </div>
+                      <button onClick={() => copyField(openItem, field)} style={{ ...outlineBtn, width: 'auto', flex: '0 0 auto', padding: '8px 14px', fontSize: 13 }}>Copy</button>
+                    </div>
+                  ))}
+
+                  
+                    href="https://www.facebook.com/marketplace/create/item"
+                    target="_blank"
+                    rel="noopener"
+                    style={{ display: 'block', textAlign: 'center', marginTop: 10, padding: 14, background: colors.ink, color: '#fff', borderRadius: 999, fontWeight: 600, textDecoration: 'none', fontSize: 14.5 }}
+                  >
+                    Open Facebook Marketplace &#8599;
+                  </a>
+                </div>
+              )}
+
+              {openItem.status === 'listed' && (
+                <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                  <button onClick={() => markSold(openItem)} style={outlineBtn}>Mark as sold</button>
+                  <button onClick={() => unlistItem(openItem)} style={outlineBtn}>Unlist</button>
+                </div>
+              )}
+
+              <button
+                onClick={() => deleteItem(openItem.id)}
+                style={{ ...outlineBtn, color: colors.accent, borderColor: colors.accent }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const inputStyle = {
+  width: '100%', padding: 12, marginBottom: 12, border: `1.5px solid ${colors.line}`,
+  borderRadius: 10, background: colors.bgAlt, fontSize: 14, boxSizing: 'border-box',
+};
+const primaryBtn = {
+  flex: 1, padding: 14, background: colors.ink, color: '#fff', border: 'none',
+  borderRadius: 999, fontWeight: 600, cursor: 'pointer', fontSize: 14.5,
+};
+const outlineBtn = {
+  flex: 1, padding: 14, background: 'transparent', color: colors.ink, border: `1.5px solid ${colors.line}`,
+  borderRadius: 999, fontWeight: 600, cursor: 'pointer', fontSize: 14.5,
+};
+const priceChoiceBtn = {
+  flex: 1, padding: '12px 8px', background: '#fff', color: colors.ink, border: `1.5px solid ${colors.line}`,
+  borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 15, textAlign: 'center',
+};
+const priceChoiceLabel = {
+  fontSize: 10, fontWeight: 600, color: colors.inkFaint, marginTop: 2, textTransform: 'uppercase',
+};
