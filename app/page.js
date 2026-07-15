@@ -138,6 +138,32 @@ export default function Home() {
     });
   }
 
+  function removePhoto(slot) {
+    setPhotos((prev) => {
+      const next = [...prev];
+      next[slot] = null;
+      return next;
+    });
+    setError(null);
+  }
+
+  async function removeSavedPhoto(item, index) {
+    const next = (item.photos || []).filter((_, i) => i !== index);
+    try {
+      const res = await fetch('/api/items/' + item.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photos: next }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setOpenItem(data.item);
+      await loadItems();
+    } catch (e) {
+      setError('Could not remove photo: ' + e.message);
+    }
+  }
+
   async function submitLog(alsoList) {
     if (!box.trim()) {
       setError('Give the item a box or location before logging it.');
@@ -399,14 +425,27 @@ export default function Home() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 6 }}>
               {[0, 1, 2].map((slot) => (
-                <label key={slot} style={{ display: 'block', aspectRatio: '1', background: colors.bgAlt, borderRadius: 14, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
-                  {photos[slot] ? (
-                    <img src={photos[slot]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>Add</div>
+                <div key={slot} style={{ position: 'relative', aspectRatio: '1' }}>
+                  <label style={{ display: 'block', width: '100%', height: '100%', background: colors.bgAlt, borderRadius: 14, overflow: 'hidden', cursor: 'pointer' }}>
+                    {photos[slot] ? (
+                      <img src={photos[slot]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>Add</div>
+                    )}
+                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => handlePhotoChange(e, slot)} />
+                  </label>
+                  {photos[slot] && (
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(slot)}
+                      title="Remove this photo"
+                      aria-label="Remove this photo"
+                      style={photoRemoveBtn}
+                    >
+                      &times;
+                    </button>
                   )}
-                  <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => handlePhotoChange(e, slot)} />
-                </label>
+                </div>
               ))}
             </div>
             <p style={{ fontSize: 12, color: colors.inkFaint, margin: '0 0 18px' }}>
@@ -530,7 +569,18 @@ export default function Home() {
               {openItem.photos?.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto' }}>
                   {openItem.photos.map((p, i) => (
-                    <img key={i} src={p} alt="" style={{ height: 180, borderRadius: 16, objectFit: 'cover', flex: openItem.photos.length === 1 ? '1 1 100%' : '1 1 0' }} />
+                    <div key={i} style={{ position: 'relative', flex: openItem.photos.length === 1 ? '1 1 100%' : '1 1 0' }}>
+                      <img src={p} alt="" style={{ width: '100%', height: 180, borderRadius: 16, objectFit: 'cover', display: 'block' }} />
+                      <button
+                        type="button"
+                        onClick={() => removeSavedPhoto(openItem, i)}
+                        title="Remove this photo"
+                        aria-label="Remove this photo"
+                        style={photoRemoveBtn}
+                      >
+                        &times;
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -646,6 +696,14 @@ export default function Home() {
   );
 }
 
+const photoRemoveBtn = {
+  position: 'absolute', top: 6, right: 6, width: 26, height: 26,
+  borderRadius: '50%', border: 'none', cursor: 'pointer',
+  background: 'rgba(0,0,0,0.6)', color: '#fff',
+  fontSize: 17, lineHeight: 1, fontWeight: 700,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  padding: 0, zIndex: 2,
+};
 const inputStyle = {
   width: '100%', padding: 12, marginBottom: 12, border: `1.5px solid ${colors.line}`,
   borderRadius: 10, background: colors.bgAlt, fontSize: 14, boxSizing: 'border-box',
