@@ -397,21 +397,23 @@ export default function Home() {
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', paddingBottom: 80, background: colors.bg, minHeight: '100vh' }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 50, background: colors.bg }}>
-        <header style={{ background: colors.ink, padding: '26px 20px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ color: '#fff', fontWeight: 800, fontSize: 26, letterSpacing: '-0.01em' }}>LogNList</div>
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Log it. List it. Find it again.</div>
+        <header style={{ background: colors.ink, padding: '30px 24px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px 16px' }}>
+          <div style={{ color: '#fff', fontWeight: 800, fontSize: 30, letterSpacing: '-0.01em' }}>LogNList</div>
+          <div style={{ color: 'rgba(255,255,255,0.62)', fontSize: 13, letterSpacing: '0.01em', fontWeight: 400, textAlign: 'right' }}>Log it. List it. Find it again.</div>
         </header>
 
-        <nav style={{ display: 'flex', background: colors.ink, padding: '0 12px 12px' }}>
+        <nav style={{ display: 'flex', background: colors.bg, borderBottom: `1px solid ${colors.line}` }}>
           {['log', 'inventory', 'find'].map((t) => (
             <button
               key={t}
               onClick={() => { setTab(t); setError(null); }}
               style={{
-                flex: 1, padding: '10px 6px', margin: '0 3px', background: tab === t ? 'rgba(255,255,255,0.12)' : 'transparent',
-                border: 'none', borderRadius: 999,
-                color: tab === t ? '#fff' : 'rgba(255,255,255,0.5)',
-                fontWeight: 600, fontSize: 12.5, letterSpacing: '0.04em', cursor: 'pointer',
+                flex: 1, background: 'transparent', border: 'none',
+                borderBottom: `2px solid ${tab === t ? colors.ink : 'transparent'}`,
+                color: tab === t ? colors.ink : colors.inkFaint,
+                fontWeight: 600, fontSize: 12.5, letterSpacing: '0.08em',
+                padding: '15px 6px 13px', cursor: 'pointer',
+                transition: 'color 0.15s ease',
               }}
             >
               {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'LOGNLIST' : 'FIND IT'}
