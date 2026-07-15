@@ -38,11 +38,54 @@ function compressImage(file) {
   });
 }
 
+function slugify(text) {
+  return (text || 'item').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'item';
+}
+
+function downloadItemPhotos(item) {
+  const photos = item.photos || [];
+  const slug = slugify(item.name || 'item');
+  photos.forEach((photo, idx) => {
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = photo;
+      a.download = `${slug}-photo-${idx + 1}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }, idx * 400);
+  });
+  return photos.length;
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
 export default function Home() {
   const [tab, setTab] = useState('log');
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   const [photos, setPhotos] = useState([null, null, null]);
   const [name, setName] = useState('');
@@ -52,6 +95,7 @@ export default function Home() {
 
   const [openItem, setOpenItem] = useState(null);
   const [valuationLoading, setValuationLoading] = useState(false);
+  const [askingPrice, setAskingPrice] = useState('');
 
   useEffect(() => {
     loadItems();
@@ -171,6 +215,63 @@ export default function Home() {
     setValuationLoading(false);
   }
 
+  async function confirmListing(item, price) {
+    try {
+      const listing = { ...item.listing, price };
+      const res = await fetch(`/api/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'listed', listing }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setOpenItem(data.item);
+      await loadItems();
+
+      const photoCount = downloadItemPhotos(data.item);
+      const text = `${data.item.listing.title || ''}\n\nPrice: $${price}\n\n${data.item.listing.description || ''}`;
+      const copied = await copyToClipboard(text);
+      setNotice(
+        `Listed! Downloaded ${photoCount} photo${photoCount === 1 ? '' : 's'}` +
+        (copied ? ' and copied the listing text to your clipboard.' : ' — clipboard copy failed, use the fields below instead.')
+      );
+      try { window.open('https://www.facebook.com/marketplace/create/item', '_blank'); } catch (e) {}
+    } catch (e) {
+      setError('Could not confirm listing: ' + e.message);
+    }
+  }
+
+  async function markSold(item) {
+    const res = await fetch(`/api/items/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'sold' }),
+    });
+    const data = await res.json();
+    setOpenItem(data.item);
+    await loadItems();
+  }
+
+  async function unlistItem(item) {
+    const res = await fetch(`/api/items/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'logged' }),
+    });
+    const data = await res.json();
+    setOpenItem(data.item);
+    await loadItems();
+  }
+
+  async function copyField(item, field) {
+    let value = '';
+    if (field === 'title') value = item.listing.title || '';
+    else if (field === 'price') value = String(item.listing.price ?? '');
+    else if (field === 'description') value = item.listing.description || '';
+    const ok = await copyToClipboard(value);
+    setNotice(ok ? `${field.charAt(0).toUpperCase() + field.slice(1)} copied.` : "Couldn't copy — select the text manually.");
+  }
+
   async function deleteItem(id) {
     await fetch(`/api/items/${id}`, { method: 'DELETE' });
     setOpenItem(null);
@@ -211,6 +312,7 @@ export default function Home() {
 
       <main style={{ padding: 20 }}>
         {error && <p style={{ color: colors.accent, fontSize: 13, marginBottom: 14 }}>{error}</p>}
+        {notice && <p style={{ color: colors.success, fontSize: 13, marginBottom: 14, fontWeight: 600 }}>{notice}</p>}
 
         {!loaded && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40 }}>Loading...</p>}
 
@@ -257,9 +359,14 @@ export default function Home() {
                 return (
                   <div
                     key={item.id}
-                    onClick={() => setOpenItem(item)}
+                    onClick={() => { setOpenItem(item); setNotice(null); }}
                     style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
                   >
+                    {item.status === 'listed' && item.listing?.price != null && (
+                      <div style={{ position: 'absolute', top: 10, right: 10, background: colors.success, color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>
+                        ${item.listing.price}
+                      </div>
+                    )}
                     {item.photos?.[0] ? (
                       <img src={item.photos[0]} alt="" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
                     ) : (
@@ -283,7 +390,7 @@ export default function Home() {
             {items.map((item) => (
               <div
                 key={item.id}
-                onClick={() => setOpenItem(item)}
+                onClick={() => { setOpenItem(item); setNotice(null); }}
                 style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 12, padding: '12px 14px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}
               >
                 {item.photos?.[0] ? (
@@ -309,7 +416,7 @@ export default function Home() {
           <div style={{ background: '#fff', width: '100%', maxWidth: 640, maxHeight: '88vh', overflowY: 'auto', borderRadius: '24px 24px 0 0', padding: 0 }}>
             <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '24px 24px 0 0' }}>
               <button
-                onClick={() => setOpenItem(null)}
+                onClick={() => { setOpenItem(null); setNotice(null); }}
                 style={{ background: 'transparent', border: 'none', color: '#fff', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
               >
                 ← Back
@@ -349,6 +456,32 @@ export default function Home() {
                       <div style={{ fontSize: 13.5, color: colors.inkSoft, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{openItem.listing.description}</div>
                     </div>
                   )}
+
+                  {openItem.status !== 'listed' && openItem.status !== 'sold' && (
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{ fontSize: 12, color: colors.inkFaint, marginBottom: 8, fontWeight: 600 }}>Ready to sell? Pick a price:</div>
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                        <button onClick={() => confirmListing(openItem, openItem.estimate.low)} style={priceChoiceBtn}>${openItem.estimate.low}<div style={priceChoiceLabel}>Min</div></button>
+                        <button onClick={() => confirmListing(openItem, Math.round((openItem.estimate.low + openItem.estimate.high) / 2))} style={{ ...priceChoiceBtn, background: colors.ink, color: '#fff' }}>${Math.round((openItem.estimate.low + openItem.estimate.high) / 2)}<div style={{ ...priceChoiceLabel, color: 'rgba(255,255,255,0.7)' }}>Mid</div></button>
+                        <button onClick={() => confirmListing(openItem, openItem.estimate.high)} style={priceChoiceBtn}>${openItem.estimate.high}<div style={priceChoiceLabel}>Max</div></button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input
+                          type="number"
+                          placeholder="Or set your own price"
+                          value={askingPrice}
+                          onChange={(e) => setAskingPrice(e.target.value)}
+                          style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+                        />
+                        <button
+                          onClick={() => { if (askingPrice) confirmListing(openItem, Number(askingPrice)); }}
+                          style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px' }}
+                        >
+                          Set
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
@@ -358,6 +491,41 @@ export default function Home() {
                   <button disabled={valuationLoading} onClick={() => runValuation(openItem, 'quick')} style={outlineBtn}>
                     Quick Valuation
                   </button>
+                </div>
+              )}
+
+              {openItem.status === 'listed' && openItem.listing && (
+                <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 10 }}>Sell on Facebook Marketplace</div>
+                  <p style={{ fontSize: 12, color: colors.inkFaint, margin: '0 0 10px' }}>Copy each field into the matching box on Facebook's create-listing form.</p>
+
+                  {['title', 'price', 'description'].map((field) => (
+                    <div key={field} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 2 }}>{field}</div>
+                        <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                          {field === 'price' ? `$${openItem.listing.price ?? ''}` : openItem.listing[field]}
+                        </div>
+                      </div>
+                      <button onClick={() => copyField(openItem, field)} style={{ ...outlineBtn, width: 'auto', flex: '0 0 auto', padding: '8px 14px', fontSize: 13 }}>Copy</button>
+                    </div>
+                  ))}
+
+                  
+                    href="https://www.facebook.com/marketplace/create/item"
+                    target="_blank"
+                    rel="noopener"
+                    style={{ display: 'block', textAlign: 'center', marginTop: 10, padding: 14, background: colors.ink, color: '#fff', borderRadius: 999, fontWeight: 600, textDecoration: 'none', fontSize: 14.5 }}
+                  >
+                    Open Facebook Marketplace ↗
+                  </a>
+                </div>
+              )}
+
+              {openItem.status === 'listed' && (
+                <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                  <button onClick={() => markSold(openItem)} style={outlineBtn}>Mark as sold</button>
+                  <button onClick={() => unlistItem(openItem)} style={outlineBtn}>Unlist</button>
                 </div>
               )}
 
@@ -386,4 +554,11 @@ const primaryBtn = {
 const outlineBtn = {
   flex: 1, padding: 14, background: 'transparent', color: colors.ink, border: `1.5px solid ${colors.line}`,
   borderRadius: 999, fontWeight: 600, cursor: 'pointer', fontSize: 14.5,
+};
+const priceChoiceBtn = {
+  flex: 1, padding: '12px 8px', background: '#fff', color: colors.ink, border: `1.5px solid ${colors.line}`,
+  borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 15, textAlign: 'center',
+};
+const priceChoiceLabel = {
+  fontSize: 10, fontWeight: 600, color: colors.inkFaint, marginTop: 2, textTransform: 'uppercase',
 };
