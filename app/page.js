@@ -93,11 +93,19 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
 
+  const [logMode, setLogMode] = useState('item'); // 'item' or 'box'
+
+  // Distinct box/location names already in use, most recent first.
+  const recentBoxes = Array.from(
+    new Set(items.map((i) => (i.box || '').trim()).filter(Boolean))
+  ).slice(0, 20);
+
   const [photos, setPhotos] = useState([null, null, null]);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [box, setBox] = useState('');
   const [notes, setNotes] = useState('');
+  const [boxDescription, setBoxDescription] = useState('');
 
   const [openItem, setOpenItem] = useState(null);
   const [valuationLoading, setValuationLoading] = useState(false);
@@ -166,6 +174,50 @@ export default function Home() {
       await loadItems();
 
       if (alsoList) setOpenItem(data.item);
+    } catch (e) {
+      setError('Save failed: ' + e.message);
+    }
+  }
+
+  function resetLogForm() {
+    setPhotos([null, null, null]);
+    setName('');
+    setCategory('');
+    setBox('');
+    setNotes('');
+    setBoxDescription('');
+  }
+
+  async function submitLogBox() {
+    if (!box.trim()) {
+      setError('Give the box a location before logging it.');
+      return;
+    }
+    const hasPhoto = photos.some(Boolean);
+    if (!boxDescription.trim() && !hasPhoto) {
+      setError("Add a photo or a quick description — I need one of the two to record what's in this box.");
+      return;
+    }
+    setError(null);
+    try {
+      const res = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'box',
+          name: '',
+          category: '',
+          box: box.trim(),
+          notes: boxDescription.trim(),
+          photos: photos.filter(Boolean),
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      resetLogForm();
+      setTab('inventory');
+      await loadItems();
     } catch (e) {
       setError('Save failed: ' + e.message);
     }
@@ -324,6 +376,27 @@ export default function Home() {
 
         {loaded && tab === 'log' && (
           <div>
+            <div style={{ display: 'flex', gap: 6, background: colors.bgAlt, borderRadius: 999, padding: 4, marginBottom: 18 }}>
+              {[
+                { key: 'item', label: 'Single Item' },
+                { key: 'box', label: 'Log a Box' },
+              ].map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => { setLogMode(m.key); setError(null); }}
+                  style={{
+                    flex: 1, padding: '10px 6px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                    fontSize: 13.5, fontWeight: 600,
+                    background: logMode === m.key ? colors.ink : 'transparent',
+                    color: logMode === m.key ? '#fff' : colors.inkFaint,
+                  }}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 6 }}>
               {[0, 1, 2].map((slot) => (
                 <label key={slot} style={{ display: 'block', aspectRatio: '1', background: colors.bgAlt, borderRadius: 14, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
@@ -336,22 +409,46 @@ export default function Home() {
                 </label>
               ))}
             </div>
-            <p style={{ fontSize: 12, color: colors.inkFaint, margin: '0 0 18px' }}>Up to 3 photos &mdash; different angles help give a more accurate valuation.</p>
-
-            <input placeholder="What is it? (leave blank to identify from photo)" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <input placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle} />
-              <input placeholder="Box / location" value={box} onChange={(e) => setBox(e.target.value)} style={inputStyle} />
-            </div>
-            <textarea placeholder="Condition / notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, minHeight: 64, resize: 'vertical' }} />
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
-              <button onClick={() => submitLog(false)} style={outlineBtn}>Log it</button>
-              <button onClick={() => submitLog(true)} style={primaryBtn}>Log N List</button>
-            </div>
-            <p style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: 16, lineHeight: 1.5 }}>
-              <strong>Log it</strong> just records what it is and where it lives. <strong>Log N List</strong> saves it and opens it so you can run a valuation.
+            <p style={{ fontSize: 12, color: colors.inkFaint, margin: '0 0 18px' }}>
+              {logMode === 'box'
+                ? "A couple of photos of what's inside is plenty — this is a quick record, not a listing."
+                : 'Up to 3 photos — different angles help give a more accurate valuation.'}
             </p>
+
+            {logMode === 'item' ? (
+              <>
+                <input placeholder="What is it? (leave blank to identify from photo)" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <input placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle} />
+                  <input placeholder="Box / location" value={box} onChange={(e) => setBox(e.target.value)} style={inputStyle} list="box-suggestions" />
+                </div>
+                <textarea placeholder="Condition / notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, minHeight: 64, resize: 'vertical' }} />
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                  <button onClick={() => submitLog(false)} style={outlineBtn}>Log it</button>
+                  <button onClick={() => submitLog(true)} style={primaryBtn}>Log N List</button>
+                </div>
+                <p style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: 16, lineHeight: 1.5 }}>
+                  <strong>Log it</strong> just records what it is and where it lives. <strong>Log N List</strong> saves it and opens it so you can run a valuation.
+                </p>
+              </>
+            ) : (
+              <>
+                <input placeholder="Box 3, garage shelf..." value={box} onChange={(e) => setBox(e.target.value)} style={inputStyle} list="box-suggestions" />
+                <textarea placeholder="What's in this box?" value={boxDescription} onChange={(e) => setBoxDescription(e.target.value)} style={{ ...inputStyle, minHeight: 88, resize: 'vertical' }} />
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                  <button onClick={submitLogBox} style={primaryBtn}>Log the box</button>
+                </div>
+                <p style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: 16, lineHeight: 1.5 }}>
+                  A box is a quick record of what&apos;s where — no valuation, no listing. Log the whole lot in one go.
+                </p>
+              </>
+            )}
+
+            <datalist id="box-suggestions">
+              {recentBoxes.map((b) => <option key={b} value={b} />)}
+            </datalist>
           </div>
         )}
 
