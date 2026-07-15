@@ -45,7 +45,7 @@ function slugify(text) {
 function limitWords(text, maxWords) {
   const words = (text || '').trim().split(/\s+/);
   if (words.length <= maxWords) return text;
-  return words.slice(0, maxWords).join(' ') + '&hellip;';
+  return words.slice(0, maxWords).join(' ') + '\u2026';
 }
 
 function downloadItemPhotos(item) {
@@ -161,6 +161,32 @@ export default function Home() {
       await loadItems();
     } catch (e) {
       setError('Could not remove photo: ' + e.message);
+    }
+  }
+
+  async function addSavedPhoto(item, e) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const current = item.photos || [];
+    if (current.length >= 3) {
+      setError('Three photos is the limit — remove one first.');
+      return;
+    }
+    try {
+      const dataUrl = await compressImage(file);
+      const res = await fetch('/api/items/' + item.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photos: [...current, dataUrl] }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setOpenItem(data.item);
+      setError(null);
+      await loadItems();
+    } catch (err) {
+      setError("Couldn't add that photo: " + err.message);
     }
   }
 
@@ -317,7 +343,7 @@ export default function Home() {
       const copied = await copyToClipboard(text);
       setNotice(
         `Listed! Downloaded ${photoCount} photo${photoCount === 1 ? '' : 's'}` +
-        (copied ? ' and copied the listing text to your clipboard.' : ' &mdash; clipboard copy failed, use the fields below instead.')
+        (copied ? ' and copied the listing text to your clipboard.' : ' \u2014 clipboard copy failed, use the fields below instead.')
       );
       try { window.open('https://www.facebook.com/marketplace/create/item', '_blank'); } catch (e) {}
     } catch (e) {
@@ -353,7 +379,7 @@ export default function Home() {
     else if (field === 'price') value = String(item.listing.price ?? '');
     else if (field === 'description') value = item.listing.description || '';
     const ok = await copyToClipboard(value);
-    setNotice(ok ? `${field.charAt(0).toUpperCase() + field.slice(1)} copied.` : "Couldn't copy &mdash; select the text manually.");
+    setNotice(ok ? `${field.charAt(0).toUpperCase() + field.slice(1)} copied.` : "Couldn't copy \u2014 select the text manually.");
   }
 
   async function deleteItem(id) {
@@ -566,24 +592,48 @@ export default function Home() {
             </div>
 
             <div style={{ padding: 20 }}>
-              {openItem.photos?.length > 0 && (
-                <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto' }}>
-                  {openItem.photos.map((p, i) => (
-                    <div key={i} style={{ position: 'relative', flex: openItem.photos.length === 1 ? '1 1 100%' : '1 1 0' }}>
-                      <img src={p} alt="" style={{ width: '100%', height: 180, borderRadius: 16, objectFit: 'cover', display: 'block' }} />
-                      <button
-                        type="button"
-                        onClick={() => removeSavedPhoto(openItem, i)}
-                        title="Remove this photo"
-                        aria-label="Remove this photo"
-                        style={photoRemoveBtn}
+              {(() => {
+                const pics = openItem.photos || [];
+                return (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto' }}>
+                    {pics.map((p, i) => (
+                      <div key={i} style={{ position: 'relative', flex: pics.length === 1 ? '1 1 100%' : '1 1 0', minWidth: 120 }}>
+                        <img src={p} alt="" style={{ width: '100%', height: 180, borderRadius: 16, objectFit: 'cover', display: 'block' }} />
+                        <button
+                          type="button"
+                          onClick={() => removeSavedPhoto(openItem, i)}
+                          title="Remove this photo"
+                          aria-label="Remove this photo"
+                          style={photoRemoveBtn}
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ))}
+                    {pics.length < 3 && (
+                      <label
+                        style={{
+                          flex: pics.length === 0 ? '1 1 100%' : '0 0 120px',
+                          height: 180, borderRadius: 16, background: colors.bgAlt,
+                          border: `1.5px dashed ${colors.line}`, cursor: 'pointer',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                          gap: 4, color: colors.inkFaint, fontSize: 13, fontWeight: 600,
+                        }}
                       >
-                        &times;
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+                        <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
+                        {pics.length === 0 ? 'Add a photo' : 'Add'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          style={{ display: 'none' }}
+                          onChange={(e) => addSavedPhoto(openItem, e)}
+                        />
+                      </label>
+                    )}
+                  </div>
+                );
+              })()}
 
               <h3 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px' }}>{openItem.name || 'Unidentified item'}</h3>
               <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 16 }}>
