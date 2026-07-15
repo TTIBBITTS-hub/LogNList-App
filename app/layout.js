@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Log&List',
+  title: 'LogNList',
   description: 'Log it. List it. Find it again.',
 };
 

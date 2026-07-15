@@ -346,7 +346,7 @@ export default function Home() {
     <div style={{ maxWidth: 640, margin: '0 auto', paddingBottom: 80, background: colors.bg, minHeight: '100vh' }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 50, background: colors.bg }}>
         <header style={{ background: colors.ink, padding: '26px 20px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ color: '#fff', fontWeight: 800, fontSize: 26, letterSpacing: '-0.01em' }}>Log&List</div>
+          <div style={{ color: '#fff', fontWeight: 800, fontSize: 26, letterSpacing: '-0.01em' }}>LogNList</div>
           <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Log it. List it. Find it again.</div>
         </header>
 
@@ -362,7 +362,7 @@ export default function Home() {
                 fontWeight: 600, fontSize: 12.5, letterSpacing: '0.04em', cursor: 'pointer',
               }}
             >
-              {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'LOG&LIST' : 'FIND IT'}
+              {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'LOGNLIST' : 'FIND IT'}
             </button>
           ))}
         </nav>
@@ -454,7 +454,7 @@ export default function Home() {
 
         {loaded && tab === 'inventory' && (
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Log&List ({items.length})</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>LogNList ({items.length})</h2>
             {items.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 30 }}>Nothing logged yet.</p>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
               {items.map((item) => {
