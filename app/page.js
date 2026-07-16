@@ -96,6 +96,7 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
 
+  const [logDocument, setLogDocument] = useState(null); // {name, dataUrl, mime}
   const [searchQuery, setSearchQuery] = useState('');
   const [listening, setListening] = useState(null);
 
@@ -243,6 +244,43 @@ export default function Home() {
     }
   }
 
+  const MAX_DOC_BYTES = 1024 * 1024; // 1MB of raw file. Base64 makes it ~1.33MB in the row.
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Could not read that file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleDocumentChange(e) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      let dataUrl;
+      if (file.type.startsWith('image/')) {
+        // A photo of a receipt is just a photo — squash it like any other.
+        dataUrl = await compressImage(file);
+      } else {
+        if (file.size > MAX_DOC_BYTES) {
+          setError(
+            `That file is ${(file.size / 1024 / 1024).toFixed(1)}MB — the limit is 1MB. ` +
+            'Try photographing the receipt instead, or shrink the PDF.'
+          );
+          return;
+        }
+        dataUrl = await readFileAsDataURL(file);
+      }
+      setLogDocument({ name: file.name, dataUrl, mime: file.type || 'application/octet-stream' });
+      setError(null);
+    } catch (err) {
+      setError("Couldn't attach that file: " + err.message);
+    }
+  }
+
   function exportBackup() {
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -280,6 +318,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          document: logDocument,
           type: 'item',
           name: name.trim(),
           category: category.trim(),
@@ -296,6 +335,7 @@ export default function Home() {
       setCategory('');
       setBox('');
       setNotes('');
+      setLogDocument(null);
       setTab('inventory');
       await loadItems();
 
@@ -306,6 +346,7 @@ export default function Home() {
   }
 
   function resetLogForm() {
+    setLogDocument(null);
     setPhotos([null, null, null]);
     setName('');
     setCategory('');
@@ -593,6 +634,36 @@ export default function Home() {
                   <MicButton textarea active={listening === 'notes'} onClick={() => startVoice('notes', setNotes)} />
                 </div>
 
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, color: colors.inkFaint, fontWeight: 600, letterSpacing: '0.05em', marginBottom: 6 }}>
+                    RECEIPT / DOCUMENT (OPTIONAL)
+                  </div>
+                  {logDocument ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: colors.bgAlt, border: `1.5px solid ${colors.line}`, borderRadius: 10 }}>
+                      {logDocument.mime.startsWith('image/') ? (
+                        <img src={logDocument.dataUrl} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 6 }} />
+                      ) : (
+                        <DocIcon />
+                      )}
+                      <span style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{logDocument.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setLogDocument(null); setError(null); }}
+                        title="Remove this document"
+                        aria-label="Remove this document"
+                        style={{ background: 'none', border: 'none', color: colors.inkFaint, fontSize: 20, lineHeight: 1, cursor: 'pointer', padding: '0 4px' }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ) : (
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, background: colors.bgAlt, border: `1.5px dashed ${colors.line}`, borderRadius: 10, cursor: 'pointer', fontSize: 13, color: colors.inkFaint, fontWeight: 600 }}>
+                      <span style={{ fontSize: 17, lineHeight: 1 }}>+</span> Attach a receipt
+                      <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={handleDocumentChange} />
+                    </label>
+                  )}
+                </div>
+
                 <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
                   <button onClick={() => submitLog(false)} style={outlineBtn}>Log it</button>
                   <button onClick={() => submitLog(true)} style={primaryBtn}>Log N List</button>
@@ -762,6 +833,27 @@ export default function Home() {
             </div>
 
             <div style={{ padding: 20 }}>
+              {openItem.document && (
+                <a
+                  href={openItem.document.dataUrl}
+                  target="_blank"
+                  rel="noopener"
+                  download={openItem.document.name}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, marginBottom: 12, background: colors.bgAlt, border: `1px solid ${colors.line}`, borderRadius: 10, textDecoration: 'none', color: colors.ink }}
+                >
+                  {openItem.document.mime?.startsWith('image/') ? (
+                    <img src={openItem.document.dataUrl} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 6 }} />
+                  ) : (
+                    <DocIcon />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: colors.inkFaint, fontWeight: 600, letterSpacing: '0.05em' }}>RECEIPT</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{openItem.document.name}</div>
+                  </div>
+                  <span style={{ fontSize: 12, color: colors.inkFaint }}>Open &#8599;</span>
+                </a>
+              )}
+
               {(() => {
                 const pics = openItem.photos || [];
                 return (
@@ -955,6 +1047,17 @@ function BoxMark({ size = 72 }) {
         </g>
       </g>
     </svg>
+  );
+}
+
+function DocIcon({ size = 36 }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: 6, background: colors.line, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <svg viewBox="0 0 24 24" fill="none" stroke={colors.inkSoft} strokeWidth="1.6" style={{ width: size * 0.55, height: size * 0.55 }}>
+        <path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+        <path d="M14 3v5h5M9 13h6M9 17h6" />
+      </svg>
+    </div>
   );
 }
 
