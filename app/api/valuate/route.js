@@ -19,6 +19,8 @@ export async function POST(request) {
       ? `\n\nCRITICAL - the person who owns this item has given you this first-hand guidance, and it should be your PRIMARY anchor for the valuation, overriding generic search results where they conflict: "${valuationTip.trim()}". If this guidance includes a specific value or price, your estimate must be centered on that figure unless you find strong, specific, directly-contradicting evidence.`
       : '';
 
+    const knownPrice = mode === 'known';
+
     const siteScopeInstruction = mode === 'quick'
       ? "Search eBay and Trade Me (trademe.co.nz, New Zealand's main second-hand marketplace) for what this item typically sells for second-hand - just these two sites is fine for a quick check."
       : "Search multiple resale marketplaces worldwide for what this item typically sells for second-hand. Always check eBay and Trade Me as a baseline, and also check other major marketplaces relevant to this specific type of item (Chrono24 for watches, Vestiaire Collective/Depop/Poshmark/Grailed for clothing, Facebook Marketplace/Gumtree for general secondhand goods, etc).";
@@ -27,20 +29,33 @@ export async function POST(request) {
       ? 'All prices must end up in New Zealand dollars (NZD): convert using your best approximate knowledge of current exchange rates rather than searching for an exact live rate.'
       : "All prices must end up converted to New Zealand dollars (NZD): look up today's exchange rate and convert accurately, noting in your reasoning which currencies you converted from.";
 
-    const promptText =
-      (hasName ? `Item name: ${name}` : 'Item name: (not provided - identify from photo)') +
-      (category ? `\nCategory: ${category}` : '') +
-      (notes ? `\nNotes/condition: ${notes}` : '') +
-      tipNote +
-      `\n\n${identificationInstruction} ${siteScopeInstruction} ${currencyInstruction} ` +
-      "Also search for the current new retail price (RRP) today if still sold new, converted to NZD - null if discontinued or unknown. " +
-      "Then draft a listing styled for Facebook Marketplace: casual, first person, honest, 2-4 short paragraphs separated by a blank line, ending with a casual line inviting messages. " +
-      "IMPORTANT: Respond with ONLY a raw JSON object, no markdown fences, no commentary, starting with { and ending with }, in exactly this shape: " +
-      '{"identified_item":"string","identified_category":"string","estimate_low":number,"estimate_high":number,"currency":"NZD","suggested_price":number,"new_price":number|null,"sources_checked":["string"],"listing_title":"string","listing_description":"string","reasoning":"string"}';
+    const listingStyle =
+      'Draft a listing styled for Facebook Marketplace: casual, first person, honest, 2-4 short paragraphs separated by a blank line, ending with a casual line inviting messages.';
+
+    const promptText = knownPrice
+      ? // The owner has already decided the price. Don't research one - just say what it is
+        // and write the ad. No web search, so this comes back in a couple of seconds.
+        (hasName ? `Item name: ${name}` : 'Item name: (not provided - identify from photo)') +
+        (category ? `\nCategory: ${category}` : '') +
+        (notes ? `\nNotes/condition: ${notes}` : '') +
+        `\n\n${identificationInstruction} ` +
+        'Do NOT research or estimate a price - the owner has already decided what they want for it. ' +
+        `${listingStyle} Do not mention any price in the title or description - the price is handled separately. ` +
+        'IMPORTANT: Respond with ONLY a raw JSON object, no markdown fences, no commentary, starting with { and ending with }, in exactly this shape: ' +
+        '{"identified_item":"string","identified_category":"string","listing_title":"string","listing_description":"string"}'
+      : (hasName ? `Item name: ${name}` : 'Item name: (not provided - identify from photo)') +
+        (category ? `\nCategory: ${category}` : '') +
+        (notes ? `\nNotes/condition: ${notes}` : '') +
+        tipNote +
+        `\n\n${identificationInstruction} ${siteScopeInstruction} ${currencyInstruction} ` +
+        "Also search for the current new retail price (RRP) today if still sold new, converted to NZD - null if discontinued or unknown. " +
+        `Then ${listingStyle.charAt(0).toLowerCase() + listingStyle.slice(1)} ` +
+        "IMPORTANT: Respond with ONLY a raw JSON object, no markdown fences, no commentary, starting with { and ending with }, in exactly this shape: " +
+        '{"identified_item":"string","identified_category":"string","estimate_low":number,"estimate_high":number,"currency":"NZD","suggested_price":number,"new_price":number|null,"sources_checked":["string"],"listing_title":"string","listing_description":"string","reasoning":"string"}';
 
     content.push({ type: 'text', text: promptText });
 
-    const maxAttempts = mode === 'quick' ? 1 : 2;
+    const maxAttempts = mode === 'quick' || knownPrice ? 1 : 2;
     let parsed = null;
     let lastError = null;
 
@@ -56,7 +71,8 @@ export async function POST(request) {
           model: 'claude-sonnet-4-6',
           max_tokens: 2000,
           messages: [{ role: 'user', content }],
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          // No web search when the price is already known - nothing to look up.
+          ...(knownPrice ? {} : { tools: [{ type: 'web_search_20250305', name: 'web_search' }] }),
         }),
       });
       const data = await response.json();
