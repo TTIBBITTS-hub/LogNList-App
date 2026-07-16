@@ -96,6 +96,7 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
 
+  const [searchQuery, setSearchQuery] = useState('');
   const [listening, setListening] = useState(null);
 
   function startVoice(field, setter) {
@@ -134,6 +135,18 @@ export default function Home() {
   }
 
   const [logMode, setLogMode] = useState('item'); // 'item' or 'box'
+
+  // Search matches name, category, box and notes — same fields as the artifact.
+  const searchResults = (() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((i) =>
+      (i.name || '').toLowerCase().includes(q) ||
+      (i.category || '').toLowerCase().includes(q) ||
+      (i.box || '').toLowerCase().includes(q) ||
+      (i.notes || '').toLowerCase().includes(q)
+    );
+  })();
 
   // Distinct box/location names already in use, most recent first.
   const recentBoxes = Array.from(
@@ -673,26 +686,65 @@ export default function Home() {
         {loaded && tab === 'find' && (
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Find it</h2>
-            {items.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => { setOpenItem(item); setNotice(null); }}
-                style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 12, padding: '12px 14px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}
-              >
-                {item.photos?.[0] ? (
-                  <img src={item.photos[0]} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, background: colors.bgAlt }} />
-                ) : (
-                  <div style={{ width: 44, height: 44, background: colors.bgAlt, borderRadius: 8 }} />
-                )}
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{item.name || 'Unidentified item'}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: colors.accent }}>{item.box}</div>
-                  <div style={{ fontSize: 10, color: colors.inkFaint, textTransform: 'uppercase' }}>location</div>
-                </div>
-              </div>
-            ))}
+
+            <div style={{ ...fieldWrap, marginBottom: 16 }}>
+              <input
+                type="text"
+                placeholder="Search name, category, box or notes..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={micInputStyle}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  title="Clear search"
+                  aria-label="Clear search"
+                  style={{
+                    position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                    width: 32, height: 32, borderRadius: '50%', border: 'none',
+                    background: colors.bgAlt, color: colors.inkSoft,
+                    fontSize: 17, lineHeight: 1, cursor: 'pointer', padding: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+
+            {searchResults.length === 0 ? (
+              <p style={{ fontSize: 13.5, color: colors.inkFaint, textAlign: 'center', padding: '28px 0' }}>
+                {searchQuery.trim() ? 'Nothing matches that yet.' : 'Nothing logged yet.'}
+              </p>
+            ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
+              {searchResults.map((item) => {
+                const isBox = item.type === 'box';
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => { setOpenItem(item); setNotice(null); }}
+                    style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
+                  >
+                    {item.photos?.[0] ? (
+                      <img src={item.photos[0]} alt="" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
+                    ) : (
+                      <div style={{ width: 50, height: 50, background: colors.bgAlt, borderRadius: 9, marginBottom: 10 }} />
+                    )}
+                    <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 8 }}>
+                      {isBox
+                        ? limitWords(item.notes || 'Mixed box', 6)
+                        : limitWords(item.name || 'Unidentified item', 6)}
+                    </div>
+                    <div style={{ fontSize: 10, color: colors.inkFaint, fontWeight: 600, letterSpacing: '0.05em' }}>LOCATION</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: colors.ink, marginTop: 1 }}>{item.box}</div>
+                  </div>
+                );
+              })}
+            </div>
+            )}
           </div>
         )}
       </main>
