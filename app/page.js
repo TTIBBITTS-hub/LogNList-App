@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react';
 
+// LogNList wordmark, inlined so there's no public/ folder to get wrong.
+const LOGO_WORDMARK = 'data:image/png;base64,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';
+
 const colors = {
   ink: '#171A20',
   inkSoft: '#5C5E62',
@@ -92,6 +95,43 @@ export default function Home() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+
+  const [listening, setListening] = useState(null);
+
+  function startVoice(field, setter) {
+    const Ctor =
+      typeof window !== 'undefined' &&
+      (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!Ctor) {
+      setError("Voice input isn't supported in this browser. Try Chrome, or just type instead.");
+      return;
+    }
+    if (listening) return; // already listening
+
+    const recognition = new Ctor();
+    recognition.lang = navigator.language || 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    setListening(field);
+
+    recognition.onresult = (event) => {
+      const transcript = (event.results[0][0].transcript || '').trim();
+      if (transcript) {
+        setter((cur) => (cur && cur.trim() ? cur.trim() + ' ' + transcript : transcript));
+      }
+    };
+    recognition.onerror = () => {
+      // Fails quietly — you can try again or just type.
+    };
+    recognition.onend = () => setListening(null);
+
+    try {
+      recognition.start();
+    } catch (e) {
+      setListening(null);
+    }
+  }
 
   const [logMode, setLogMode] = useState('item'); // 'item' or 'box'
 
@@ -188,6 +228,27 @@ export default function Home() {
     } catch (err) {
       setError("Couldn't add that photo: " + err.message);
     }
+  }
+
+  function exportBackup() {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      app: 'LogNList',
+      itemCount: items.length,
+      items,
+    };
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lognlist-backup-' + dateStr + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    setNotice(`Exported ${items.length} item${items.length === 1 ? '' : 's'}.`);
   }
 
   async function submitLog(alsoList) {
@@ -392,13 +453,26 @@ export default function Home() {
     logged: { bg: colors.bgAlt, text: colors.inkSoft },
     listed: { bg: colors.successBg, text: colors.success },
     sold: { bg: '#FBEAEC', text: colors.accent },
+    box: { bg: '#EFE9F7', text: '#6B4FA0' },
   };
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', paddingBottom: 80, background: colors.bg, minHeight: '100vh' }}>
+      <style>{`
+        @keyframes mic-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(227,25,55,0.35); }
+          50%      { box-shadow: 0 0 0 7px rgba(227,25,55,0); }
+        }
+        .mic-btn.listening { animation: mic-pulse 1s ease-in-out infinite; }
+        .mic-btn:not(.listening):hover { background: #E3E3E5; }
+      `}</style>
       <div style={{ position: 'sticky', top: 0, zIndex: 50, background: colors.bg }}>
         <header style={{ background: colors.ink, padding: '30px 24px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px 16px' }}>
-          <div style={{ color: '#fff', fontWeight: 800, fontSize: 30, letterSpacing: '-0.01em' }}>LogNList</div>
+          <img
+            src={LOGO_WORDMARK}
+            alt="LogNList"
+            style={{ height: 30, width: 'auto', display: 'block' }}
+          />
           <div style={{ color: 'rgba(255,255,255,0.62)', fontSize: 13, letterSpacing: '0.01em', fontWeight: 400, textAlign: 'right' }}>Log it. List it. Find it again.</div>
         </header>
 
@@ -484,12 +558,24 @@ export default function Home() {
 
             {logMode === 'item' ? (
               <>
-                <input placeholder="What is it? (leave blank to identify from photo)" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <input placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle} />
-                  <input placeholder="Box / location" value={box} onChange={(e) => setBox(e.target.value)} style={inputStyle} list="box-suggestions" />
+                <div style={fieldWrap}>
+                  <input placeholder="What is it? (leave blank to identify from photo)" value={name} onChange={(e) => setName(e.target.value)} style={micInputStyle} />
+                  <MicButton active={listening === 'name'} onClick={() => startVoice('name', setName)} />
                 </div>
-                <textarea placeholder="Condition / notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inputStyle, minHeight: 64, resize: 'vertical' }} />
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ ...fieldWrap, flex: 1 }}>
+                    <input placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} style={micInputStyle} />
+                    <MicButton active={listening === 'category'} onClick={() => startVoice('category', setCategory)} />
+                  </div>
+                  <div style={{ ...fieldWrap, flex: 1 }}>
+                    <input placeholder="Box / location" value={box} onChange={(e) => setBox(e.target.value)} style={micInputStyle} list="box-suggestions" />
+                    <MicButton active={listening === 'box'} onClick={() => startVoice('box', setBox)} />
+                  </div>
+                </div>
+                <div style={fieldWrap}>
+                  <textarea placeholder="Condition / notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...micInputStyle, minHeight: 64, resize: 'vertical', display: 'block' }} />
+                  <MicButton textarea active={listening === 'notes'} onClick={() => startVoice('notes', setNotes)} />
+                </div>
 
                 <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
                   <button onClick={() => submitLog(false)} style={outlineBtn}>Log it</button>
@@ -501,8 +587,14 @@ export default function Home() {
               </>
             ) : (
               <>
-                <input placeholder="Box 3, garage shelf..." value={box} onChange={(e) => setBox(e.target.value)} style={inputStyle} list="box-suggestions" />
-                <textarea placeholder="What's in this box?" value={boxDescription} onChange={(e) => setBoxDescription(e.target.value)} style={{ ...inputStyle, minHeight: 88, resize: 'vertical' }} />
+                <div style={fieldWrap}>
+                  <input placeholder="Box 3, garage shelf..." value={box} onChange={(e) => setBox(e.target.value)} style={micInputStyle} list="box-suggestions" />
+                  <MicButton active={listening === 'box'} onClick={() => startVoice('box', setBox)} />
+                </div>
+                <div style={fieldWrap}>
+                  <textarea placeholder="What's in this box?" value={boxDescription} onChange={(e) => setBoxDescription(e.target.value)} style={{ ...micInputStyle, minHeight: 88, resize: 'vertical', display: 'block' }} />
+                  <MicButton textarea active={listening === 'boxDescription'} onClick={() => startVoice('boxDescription', setBoxDescription)} />
+                </div>
 
                 <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
                   <button onClick={submitLogBox} style={primaryBtn}>Log the box</button>
@@ -525,7 +617,8 @@ export default function Home() {
             {items.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 30 }}>Nothing logged yet.</p>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
               {items.map((item) => {
-                const sc = statusColors[item.status] || statusColors.logged;
+                const isBox = item.type === 'box';
+                const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
                 return (
                   <div
                     key={item.id}
@@ -542,18 +635,38 @@ export default function Home() {
                     ) : (
                       <div style={{ width: 50, height: 50, background: colors.bgAlt, borderRadius: 9, marginBottom: 10 }} />
                     )}
-                    <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>{limitWords(item.name || 'Unidentified item', 6)}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
+                      {isBox
+                        ? limitWords(item.notes || 'Mixed box', 6)
+                        : limitWords(item.name || 'Unidentified item', 6)}
+                    </div>
                     <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>BOX: {item.box}</div>
                     <span style={{ display: 'inline-block', marginTop: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '3px 8px', borderRadius: 999, background: sc.bg, color: sc.text }}>
-                      {item.status?.toUpperCase()}
+                      {isBox ? 'MIXED BOX' : item.status?.toUpperCase()}
                     </span>
                   </div>
                 );
               })}
             </div>
+
+            <div style={{ textAlign: 'center', marginTop: 28, paddingTop: 18, borderTop: `1px solid ${colors.line}` }}>
+              <button
+                type="button"
+                onClick={exportBackup}
+                disabled={items.length === 0}
+                style={{
+                  background: 'none', border: 'none',
+                  color: colors.inkFaint, fontSize: 12,
+                  cursor: items.length === 0 ? 'default' : 'pointer',
+                  padding: '4px 6px', textDecoration: 'underline', textUnderlineOffset: 2,
+                  opacity: items.length === 0 ? 0.5 : 1,
+                }}
+              >
+                Export backup
+              </button>
+            </div>
           </div>
         )}
-
         {loaded && tab === 'find' && (
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Find it</h2>
@@ -748,6 +861,34 @@ export default function Home() {
   );
 }
 
+function MicButton({ active, onClick, textarea }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Speak to fill this in"
+      aria-label="Speak to fill this in"
+      className={active ? 'mic-btn listening' : 'mic-btn'}
+      style={{
+        position: 'absolute',
+        right: 6,
+        ...(textarea ? { top: 14 } : { top: '50%', transform: 'translateY(-50%)' }),
+        width: 32, height: 32, borderRadius: '50%', border: 'none',
+        background: active ? colors.accent : colors.bgAlt,
+        color: active ? '#fff' : colors.inkSoft,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', padding: 0, zIndex: 2,
+      }}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 16, height: 16 }}>
+        <rect x="9" y="2" width="6" height="12" rx="3" />
+        <path d="M5 10a7 7 0 0 0 14 0" />
+        <path d="M12 17v5M8 22h8" />
+      </svg>
+    </button>
+  );
+}
+
 const photoRemoveBtn = {
   position: 'absolute', top: 6, right: 6, width: 26, height: 26,
   borderRadius: '50%', border: 'none', cursor: 'pointer',
@@ -756,10 +897,12 @@ const photoRemoveBtn = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   padding: 0, zIndex: 2,
 };
+const fieldWrap = { position: 'relative', marginBottom: 12 };
 const inputStyle = {
   width: '100%', padding: 12, marginBottom: 12, border: `1.5px solid ${colors.line}`,
   borderRadius: 10, background: colors.bgAlt, fontSize: 14, boxSizing: 'border-box',
 };
+const micInputStyle = { ...inputStyle, marginBottom: 0, paddingRight: 44 };
 const primaryBtn = {
   flex: 1, padding: 14, background: colors.ink, color: '#fff', border: 'none',
   borderRadius: 999, fontWeight: 600, cursor: 'pointer', fontSize: 14.5,
