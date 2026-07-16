@@ -24,6 +24,7 @@ export async function POST(request) {
       box: body.box || '',
       notes: body.notes || '',
       photos: body.photos || [],
+      document: body.document || null,
       status: 'logged',
     })
     .select()
