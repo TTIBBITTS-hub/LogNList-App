@@ -96,6 +96,7 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
 
+  const [knownPrice, setKnownPrice] = useState('');
   const [logDocument, setLogDocument] = useState(null); // {name, dataUrl, mime}
   const [searchQuery, setSearchQuery] = useState('');
   const [listening, setListening] = useState(null);
@@ -436,6 +437,54 @@ export default function Home() {
       await loadItems();
     } catch (e) {
       setError('Valuation failed: ' + e.message);
+    }
+    setValuationLoading(false);
+  }
+
+  // You already know the price. Skip the research, just identify it and write the ad.
+  async function listAtKnownPrice(item) {
+    const price = Number(knownPrice);
+    if (!knownPrice.trim() || !Number.isFinite(price) || price <= 0) {
+      setError('Put in a price first.');
+      return;
+    }
+    setValuationLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/valuate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: item.name,
+          category: item.category,
+          notes: item.notes,
+          photos: item.photos,
+          mode: 'known',
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const listing = {
+        title: data.result.listing_title,
+        description: data.result.listing_description,
+      };
+      const patchRes = await fetch(`/api/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: item.name || data.result.identified_item,
+          category: item.category || data.result.identified_category,
+          listing,
+        }),
+      });
+      const patched = await patchRes.json();
+      if (patched.error) throw new Error(patched.error);
+
+      setKnownPrice('');
+      await confirmListing(patched.item, price);
+    } catch (e) {
+      setError('Could not build the listing: ' + e.message);
     }
     setValuationLoading(false);
   }
@@ -969,13 +1018,40 @@ export default function Home() {
                   </p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-                  <button className="act" onClick={() => runValuation(openItem, 'deep')} style={primaryBtn}>
-                    Deep Dive
-                  </button>
-                  <button className="act" onClick={() => runValuation(openItem, 'quick')} style={outlineBtn}>
-                    Quick Valuation
-                  </button>
+                <div>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                    <button className="act" onClick={() => runValuation(openItem, 'deep')} style={primaryBtn}>
+                      Deep Dive
+                    </button>
+                    <button className="act" onClick={() => runValuation(openItem, 'quick')} style={outlineBtn}>
+                      Quick Valuation
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                    <div style={{ position: 'relative', flex: '0 0 110px' }}>
+                      <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: colors.inkFaint, fontWeight: 600 }}>$</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="1"
+                        placeholder="10"
+                        value={knownPrice}
+                        onChange={(e) => setKnownPrice(e.target.value)}
+                        style={{ ...inputStyle, marginBottom: 0, paddingLeft: 24, fontWeight: 600 }}
+                      />
+                    </div>
+                    <button
+                      className="act"
+                      onClick={() => listAtKnownPrice(openItem)}
+                      style={{ ...outlineBtn, flex: 1 }}
+                    >
+                      I know the price &#8594; list it
+                    </button>
+                  </div>
+                  <p style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', margin: '0 0 14px', lineHeight: 1.5 }}>
+                    Skips the price research &#8212; just works out what it is and writes the ad.
+                  </p>
                 </div>
               )}
 
