@@ -519,6 +519,19 @@ export default function Home() {
         }
         .mic-btn.listening { animation: mic-pulse 1s ease-in-out infinite; }
         .mic-btn:not(.listening):hover { background: #E3E3E5; }
+
+        /* Any button that DOES something flashes brand green while held.
+           !important because these sit against inline styles. */
+        .act:active:not(:disabled) {
+          background: #7CCB2B !important;
+          border-color: #7CCB2B !important;
+          color: #171A20 !important;
+          transform: scale(0.98);
+        }
+        .act:active:not(:disabled) * { color: #171A20 !important; }
+        .act { transition: background 0.08s ease, border-color 0.08s ease, transform 0.08s ease; }
+
+        @keyframes rain-in { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
       <div style={{ position: 'sticky', top: 0, zIndex: 50, background: colors.bg }}>
         <header style={{ background: colors.ink, padding: '30px 24px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px 16px' }}>
@@ -665,8 +678,8 @@ export default function Home() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
-                  <button onClick={() => submitLog(false)} style={outlineBtn}>Log it</button>
-                  <button onClick={() => submitLog(true)} style={primaryBtn}>Log N List</button>
+                  <button className="act" onClick={() => submitLog(false)} style={outlineBtn}>Log it</button>
+                  <button className="act" onClick={() => submitLog(true)} style={primaryBtn}>Log N List</button>
                 </div>
                 <p style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: 16, lineHeight: 1.5 }}>
                   <strong>Log it</strong> just records what it is and where it lives. <strong>Log N List</strong> saves it and opens it so you can run a valuation.
@@ -684,7 +697,7 @@ export default function Home() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
-                  <button onClick={submitLogBox} style={primaryBtn}>Log the box</button>
+                  <button className="act" onClick={submitLogBox} style={primaryBtn}>Log the box</button>
                 </div>
                 <p style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: 16, lineHeight: 1.5 }}>
                   A box is a quick record of what&apos;s where — no valuation, no listing. Log the whole lot in one go.
@@ -926,9 +939,9 @@ export default function Home() {
                     <div style={{ marginTop: 14 }}>
                       <div style={{ fontSize: 12, color: colors.inkFaint, marginBottom: 8, fontWeight: 600 }}>Ready to sell? Pick a price:</div>
                       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                        <button onClick={() => confirmListing(openItem, openItem.estimate.low)} style={priceChoiceBtn}>${openItem.estimate.low}<div style={priceChoiceLabel}>Min</div></button>
-                        <button onClick={() => confirmListing(openItem, Math.round((openItem.estimate.low + openItem.estimate.high) / 2))} style={{ ...priceChoiceBtn, background: colors.ink, color: '#fff' }}>${Math.round((openItem.estimate.low + openItem.estimate.high) / 2)}<div style={{ ...priceChoiceLabel, color: 'rgba(255,255,255,0.7)' }}>Mid</div></button>
-                        <button onClick={() => confirmListing(openItem, openItem.estimate.high)} style={priceChoiceBtn}>${openItem.estimate.high}<div style={priceChoiceLabel}>Max</div></button>
+                        <button className="act" onClick={() => confirmListing(openItem, openItem.estimate.low)} style={priceChoiceBtn}>${openItem.estimate.low}<div style={priceChoiceLabel}>Min</div></button>
+                        <button className="act" onClick={() => confirmListing(openItem, Math.round((openItem.estimate.low + openItem.estimate.high) / 2))} style={{ ...priceChoiceBtn, background: colors.ink, color: '#fff' }}>${Math.round((openItem.estimate.low + openItem.estimate.high) / 2)}<div style={{ ...priceChoiceLabel, color: 'rgba(255,255,255,0.7)' }}>Mid</div></button>
+                        <button className="act" onClick={() => confirmListing(openItem, openItem.estimate.high)} style={priceChoiceBtn}>${openItem.estimate.high}<div style={priceChoiceLabel}>Max</div></button>
                       </div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <input
@@ -948,12 +961,19 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+              ) : valuationLoading ? (
+                <div>
+                  <MatrixRain />
+                  <p style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: -4, marginBottom: 14 }}>
+                    Working out what it's worth&#8230;
+                  </p>
+                </div>
               ) : (
                 <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-                  <button disabled={valuationLoading} onClick={() => runValuation(openItem, 'deep')} style={primaryBtn}>
-                    {valuationLoading ? 'Working...' : 'Deep Dive'}
+                  <button className="act" onClick={() => runValuation(openItem, 'deep')} style={primaryBtn}>
+                    Deep Dive
                   </button>
-                  <button disabled={valuationLoading} onClick={() => runValuation(openItem, 'quick')} style={outlineBtn}>
+                  <button className="act" onClick={() => runValuation(openItem, 'quick')} style={outlineBtn}>
                     Quick Valuation
                   </button>
                 </div>
@@ -972,7 +992,7 @@ export default function Home() {
                           {field === 'price' ? `$${openItem.listing.price ?? ''}` : openItem.listing[field]}
                         </div>
                       </div>
-                      <button onClick={() => copyField(openItem, field)} style={{ ...outlineBtn, width: 'auto', flex: '0 0 auto', padding: '8px 14px', fontSize: 13 }}>Copy</button>
+                      <button className="act" onClick={() => copyField(openItem, field)} style={{ ...outlineBtn, width: 'auto', flex: '0 0 auto', padding: '8px 14px', fontSize: 13 }}>Copy</button>
                     </div>
                   ))}
 
@@ -989,8 +1009,8 @@ export default function Home() {
 
               {openItem.status === 'listed' && (
                 <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-                  <button onClick={() => markSold(openItem)} style={outlineBtn}>Mark as sold</button>
-                  <button onClick={() => unlistItem(openItem)} style={outlineBtn}>Unlist</button>
+                  <button className="act" onClick={() => markSold(openItem)} style={outlineBtn}>Mark as sold</button>
+                  <button className="act" onClick={() => unlistItem(openItem)} style={outlineBtn}>Unlist</button>
                 </div>
               )}
 
@@ -1047,6 +1067,47 @@ function BoxMark({ size = 72 }) {
         </g>
       </g>
     </svg>
+  );
+}
+
+// Something has to move while the API thinks, or it looks broken.
+function MatrixRain() {
+  const COLS = 18;
+  const ROWS = 8;
+  const CHARS = '0123456789$';
+  const pick = () => CHARS[Math.floor(Math.random() * CHARS.length)];
+  const [grid, setGrid] = useState(() =>
+    Array.from({ length: COLS }, () => Array.from({ length: ROWS }, pick))
+  );
+
+  useEffect(() => {
+    let n = 0;
+    const id = setInterval(() => {
+      n += 1;
+      setGrid((g) =>
+        // stagger the columns so they don't all fall in lockstep
+        g.map((col, i) => ((n + i) % (1 + (i % 3)) === 0 ? [...col.slice(1), pick()] : col))
+      );
+    }, 80);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div
+      style={{
+        background: colors.ink, borderRadius: 14, padding: '14px 10px', marginBottom: 14,
+        display: 'flex', gap: 3, justifyContent: 'center', overflow: 'hidden',
+        animation: 'rain-in 0.2s ease',
+      }}
+    >
+      {grid.map((col, i) => (
+        <div key={i} style={{ display: 'flex', flexDirection: 'column', fontFamily: 'monospace', fontSize: 12, lineHeight: '15px' }}>
+          {col.map((c, j) => (
+            <span key={j} style={{ color: '#7CCB2B', opacity: 0.15 + (j / ROWS) * 0.85 }}>{c}</span>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
