@@ -468,12 +468,14 @@ export default function Home() {
       `}</style>
       <div style={{ position: 'sticky', top: 0, zIndex: 50, background: colors.bg }}>
         <header style={{ background: colors.ink, padding: '30px 24px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px 16px' }}>
-          <BoxMark size={72} />
-          <img
-            src={LOGO_WORDMARK}
-            alt="LogNList"
-            style={{ height: 38, width: 'auto', display: 'block' }}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <BoxMark size={72} />
+            <img
+              src={LOGO_WORDMARK}
+              alt="LogNList"
+              style={{ height: 38, width: 'auto', display: 'block' }}
+            />
+          </div>
           <div style={{ color: 'rgba(255,255,255,0.62)', fontSize: 13, letterSpacing: '0.01em', fontWeight: 400, textAlign: 'right' }}>Log it. List it. Find it again.</div>
         </header>
 
@@ -865,6 +867,9 @@ export default function Home() {
 // The LogNList mark — phone outline, cardboard carton, two ticked rows.
 // Inline SVG: vector, crisp at any size, no background dependency.
 function BoxMark({ size = 72 }) {
+  // viewBox is 378x628, so lock the width to that ratio.
+  // NB: width="auto" on an <svg> resolves to 100%, not intrinsic — it hijacks the row.
+  const w = Math.round((size * 378) / 628);
   const tickRow = (dy) => (
     <g transform={`translate(0,${dy})`}>
       <circle cx="28" cy="28" r="28" fill="#7CCB2B" />
@@ -873,7 +878,7 @@ function BoxMark({ size = 72 }) {
     </g>
   );
   return (
-    <svg viewBox="71 46 378 628" height={size} width="auto" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
+    <svg viewBox="71 46 378 628" width={w} height={size} aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
       <g transform="translate(80,55)">
         <rect x="0" y="0" width="360" height="610" rx="56" fill="none" stroke="#FFFFFF" strokeWidth="18" />
         <rect x="128" y="24" width="104" height="12" rx="6" fill="#FFFFFF" />
