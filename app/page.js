@@ -18,6 +18,12 @@ const colors = {
   brand: '#7CCB2B',
 };
 
+function isBookIsbn(s) {
+  if (/^(978|979)\d{10}$/.test(s)) return true;   // EAN-13 book barcode
+  if (/^\d{9}[\dxX]$/.test(s)) return true;        // ISBN-10
+  return false;
+}
+
 const EMPTY_MESSAGES = [
   'Suspiciously empty. Somewhere, a drawer of mystery cables awaits. \uD83D\uDCE6',
   'Blank slate. Every good collection starts with one thing logged.',
@@ -225,6 +231,7 @@ export default function Home() {
   const [scanSupported, setScanSupported] = useState(true);
   const videoRef = useRef(null);
   const scannerRef = useRef(null);
+  const scanLastRef = useRef(null);
   const [dragTabId, setDragTabId] = useState(null);
   const [dragOverTab, setDragOverTab] = useState(null);
 
@@ -758,15 +765,26 @@ export default function Home() {
   }
   async function startScan() {
     setBookError(null);
+    scanLastRef.current = null;
     try {
       const ZX = await loadZXing();
-      const reader = new ZX.BrowserMultiFormatReader();
+      const hints = new Map();
+      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.EAN_13, ZX.BarcodeFormat.EAN_8, ZX.BarcodeFormat.UPC_A]);
+      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZX.BrowserMultiFormatReader(hints);
       scannerRef.current = reader;
       setScanActive(true);
       await reader.decodeFromConstraints(
         { video: { facingMode: 'environment' } },
         videoRef.current,
-        (result) => { if (result) { const t = result.getText(); stopScan(); lookupIsbn(t); } }
+        (result) => {
+          if (!result) return;
+          const raw = result.getText().replace(/[^0-9Xx]/g, '');
+          if (!isBookIsbn(raw)) return;                                   // skip price / non-book barcodes
+          if (scanLastRef.current !== raw) { scanLastRef.current = raw; return; } // confirm the same read twice
+          stopScan();
+          lookupIsbn(raw);
+        }
       );
     } catch (e) {
       setScanSupported(false); setScanActive(false);
@@ -775,7 +793,7 @@ export default function Home() {
   }
   function stopScan() {
     try { if (scannerRef.current) scannerRef.current.reset(); } catch (_) {}
-    scannerRef.current = null; setScanActive(false);
+    scannerRef.current = null; scanLastRef.current = null; setScanActive(false);
   }
 
   async function lookupIsbn(isbn) {
@@ -1489,7 +1507,7 @@ export default function Home() {
 
               {bookStep === 'scan' && (
                 <div>
-                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 12 }}>Point the camera at the barcode on the back of the book.</p>
+                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 12 }}>Hold the camera steady over the barcode on the back &mdash; the long one starting <strong>978</strong>. It&rsquo;ll grab it once it&rsquo;s in focus.</p>
                   <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
                     <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <div style={{ position: 'absolute', inset: '28% 12%', border: `2px solid rgba(124,203,43,0.9)`, borderRadius: 8 }} />
