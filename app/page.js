@@ -1048,8 +1048,6 @@ export default function Home() {
             const active = String(activeId) === String(id);
             const itemOver = ((dragOverFile === id) || picking) && !dragTabId;
             const tabOver = dragTabId && dragOverTab === id && String(dragTabId) !== String(id);
-            const bg = itemOver ? '#7CCB2B' : tabOver ? '#D89F30' : active ? '#E9AF3C' : '#F5CE73';
-            const fg = itemOver ? '#171A20' : active ? '#4E370A' : '#6E4E12';
             return (
               <button
                 key={id}
@@ -1066,14 +1064,20 @@ export default function Home() {
                   else { moveItemToFile(dragItemId, id); setDragOverFile(null); setDragItemId(null); }
                 }}
                 style={{
-                  position: 'relative', flex: '0 0 auto', whiteSpace: 'nowrap', cursor: fileObj ? 'grab' : 'pointer',
-                  padding: '11px 16px 12px', border: 'none', background: bg, color: fg,
-                  borderRadius: '2px 10px 10px 10px', fontSize: 13, fontWeight: 600,
+                  flex: '0 0 auto', whiteSpace: 'nowrap', cursor: fileObj ? 'grab' : 'pointer',
+                  padding: '9px 15px', borderRadius: '11px 11px 3px 3px', fontSize: 13, fontWeight: 600,
+                  border: tabOver ? `2px solid ${colors.ink}` : (itemOver ? `2px dashed ${colors.success}` : `1.5px solid ${active ? colors.ink : colors.line}`),
+                  background: itemOver ? colors.successBg : (active ? colors.ink : '#fff'),
+                  color: itemOver ? colors.success : (active ? '#fff' : colors.inkSoft),
                   transition: 'background 0.12s ease, color 0.12s ease',
                 }}
               >
-                <span style={{ position: 'absolute', top: -10, left: 0, width: 38, height: 11, background: bg, borderRadius: '6px 6px 0 0', transition: 'background 0.12s ease' }} />
-                {label} ({count})
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                  </svg>
+                  {label} ({count})
+                </span>
               </button>
             );
           };
@@ -1084,15 +1088,14 @@ export default function Home() {
                 The <strong>Silo</strong> holds everything you&rsquo;ve logged. Hit <strong>Move</strong> on an item to file it into a folder. Drag folders to reorder.
               </p>
 
-              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', overflowX: 'auto', padding: '14px 0 12px', marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
                 {tabPill('unfiled', 'Silo', unfiledItems.length)}
                 {files.map((f) => tabPill(f.id, f.name || 'Untitled', itemsInFile(f.id).length, f))}
                 <button
                   type="button"
                   onClick={() => { setShowNewFile(true); setNewFileName(''); }}
-                  style={{ position: 'relative', flex: '0 0 auto', whiteSpace: 'nowrap', cursor: 'pointer', padding: '11px 16px 12px', border: 'none', background: '#F1E7CE', color: colors.inkFaint, borderRadius: '2px 10px 10px 10px', fontSize: 13, fontWeight: 600 }}
+                  style={{ flex: '0 0 auto', whiteSpace: 'nowrap', cursor: 'pointer', padding: '9px 15px', borderRadius: '11px 11px 3px 3px', fontSize: 13, fontWeight: 600, border: `1.5px dashed ${colors.line}`, background: colors.bgAlt, color: colors.inkSoft }}
                 >
-                  <span style={{ position: 'absolute', top: -10, left: 0, width: 38, height: 11, background: '#F1E7CE', borderRadius: '6px 6px 0 0' }} />
                   + New
                 </button>
               </div>
