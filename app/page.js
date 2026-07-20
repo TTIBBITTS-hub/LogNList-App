@@ -201,6 +201,8 @@ export default function Home() {
   const [dragItemId, setDragItemId] = useState(null);
   const [dragOverFile, setDragOverFile] = useState(null);
   const [pickedItemId, setPickedItemId] = useState(null);
+  const [movingItem, setMovingItem] = useState(null);   // item shown in the "move to folder" sheet
+  const [sheetNewName, setSheetNewName] = useState('');
   const [dragTabId, setDragTabId] = useState(null);
   const [dragOverTab, setDragOverTab] = useState(null);
 
@@ -687,6 +689,27 @@ export default function Home() {
     }
   }
 
+  // Sheet actions: file an item into a folder (or take it out, back to LOGNLIST).
+  async function fileInto(item, fileId) {
+    setMovingItem(null);
+    await moveItemToFile(item.id, fileId);
+  }
+
+  async function createFolderInto(name, item) {
+    const nm = (name || '').trim();
+    if (!nm) return;
+    const res = await fetch('/api/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'file', name: nm, category: String(files.length) }),
+    });
+    const data = await res.json();
+    setSheetNewName('');
+    setMovingItem(null);
+    if (data.item?.id) await moveItemToFile(item.id, data.item.id);
+    else await loadItems();
+  }
+
   function reorderTabs(draggedId, targetId) {
     const ids = files.map((f) => String(f.id));
     const from = ids.indexOf(String(draggedId));
@@ -776,7 +799,7 @@ export default function Home() {
                 transition: 'color 0.15s ease',
               }}
             >
-              {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'LOGNLIST' : t === 'fileit' ? 'FILE-IT' : 'FIND IT'}
+              {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'SILO' : t === 'fileit' ? 'FILE-IT' : 'FIND IT'}
             </button>
           ))}
         </nav>
@@ -929,7 +952,7 @@ export default function Home() {
 
         {loaded && tab === 'inventory' && (
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>LogNList ({unfiledItems.length})</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Silo ({unfiledItems.length})</h2>
             {unfiledItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40, fontSize: 15, lineHeight: 1.5, padding: '0 20px' }}>{emptyMsg}</p>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
               {unfiledItems.map((item) => {
@@ -946,6 +969,15 @@ export default function Home() {
                         ${item.listing.price}
                       </div>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setSheetNewName(''); setMovingItem(item); }}
+                      title="Move to a folder"
+                      aria-label="Move to a folder"
+                      style={{ position: 'absolute', bottom: 10, right: 10, padding: '4px 10px', borderRadius: 999, border: `1px solid ${colors.line}`, background: '#fff', color: colors.inkSoft, fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', zIndex: 2 }}
+                    >
+                      Move
+                    </button>
                     {item.photos?.[0] ? (
                       <img src={item.photos[0]} alt="" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
                     ) : (
@@ -984,11 +1016,14 @@ export default function Home() {
           </div>
         )}
         {loaded && tab === 'fileit' && (() => {
-          const selectedFile = files.find((f) => String(f.id) === String(selectedFileId));
-          const shownItems = selectedFileId === 'unfiled' ? unfiledItems : itemsInFile(selectedFileId);
+          const validFolder = files.find((f) => String(f.id) === String(selectedFileId));
+          const showingSilo = selectedFileId === 'unfiled' || !validFolder;
+          const activeId = showingSilo ? 'unfiled' : selectedFileId;
+          const selectedFile = showingSilo ? null : validFolder;
+          const shownItems = showingSilo ? unfiledItems : itemsInFile(selectedFileId);
           const picking = !!pickedItemId;
           const tabPill = (id, label, count, fileObj) => {
-            const active = String(selectedFileId) === String(id);
+            const active = String(activeId) === String(id);
             const itemOver = ((dragOverFile === id) || picking) && !dragTabId;
             const tabOver = dragTabId && dragOverTab === id && String(dragTabId) !== String(id);
             return (
@@ -1028,7 +1063,7 @@ export default function Home() {
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>File-it</h2>
               <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>
-                Tap an item to open it. To file it, hit <strong>Move</strong> then tap a tab &mdash; or drag it on a computer. Drag tabs to reorder.
+                The <strong>Silo</strong> holds everything you&rsquo;ve logged. Hit <strong>Move</strong> on an item to file it into a folder. Drag tabs to reorder.
               </p>
 
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
@@ -1042,16 +1077,6 @@ export default function Home() {
                   + New tab
                 </button>
               </div>
-
-              {pickedItemId && (() => {
-                const picked = realItems.find((i) => String(i.id) === String(pickedItemId));
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, padding: '10px 14px', background: colors.ink, color: '#fff', borderRadius: 12, fontSize: 13 }}>
-                    <span style={{ flex: 1 }}>Moving <strong>{picked ? limitWords(picked.name || picked.notes || 'item', 5) : 'item'}</strong> &mdash; tap a tab above to drop it in.</span>
-                    <button type="button" onClick={() => setPickedItemId(null)} style={{ background: 'rgba(255,255,255,0.16)', border: 'none', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '6px 12px', borderRadius: 999, cursor: 'pointer', flex: '0 0 auto' }}>Cancel</button>
-                  </div>
-                );
-              })()}
 
               {showNewFile && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
@@ -1100,7 +1125,7 @@ export default function Home() {
                         <button type="button" onClick={() => { setEditingName(true); setRenameValue(selectedFile.name || ''); }} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Rename tab</button>
                       </div>
                       <div style={{ textAlign: 'center', marginTop: 18 }}>
-                        <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" tab? The items in it are kept, just moved back to Silo.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: `1px solid ${colors.line}`, color: colors.inkFaint, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '6px 14px', borderRadius: 999 }}>Delete tab</button>
+                        <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" tab? The items in it are kept, just moved back to the Silo.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: `1px solid ${colors.line}`, color: colors.inkFaint, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '6px 14px', borderRadius: 999 }}>Delete tab</button>
                       </div>
                     </div>
                   )}
@@ -1109,17 +1134,16 @@ export default function Home() {
 
               <div style={{ marginTop: 18 }}>
                 {shownItems.length === 0 ? (
-                  <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '30px 0', fontSize: 13.5 }}>
-                    {selectedFileId === 'unfiled'
-                      ? 'Nothing loose here \u2014 every item is filed.'
-                      : `Nothing in this tab yet. Open the Silo tab, then drag items up onto "${selectedFile?.name}".`}
+                  <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '30px 20px', fontSize: 13.5, lineHeight: 1.5 }}>
+                    {showingSilo
+                      ? 'The Silo is empty \u2014 log something, or it\u2019s all been filed into folders.'
+                      : <>Nothing in &ldquo;{selectedFile?.name}&rdquo; yet. In the <strong>Silo</strong> tab, hit <strong>Move</strong> on an item and pick this folder.</>}
                   </p>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
                     {shownItems.map((item) => {
                       const isBox = item.type === 'box';
                       const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
-                      const picked = String(pickedItemId) === String(item.id);
                       return (
                         <div
                           key={item.id}
@@ -1127,16 +1151,16 @@ export default function Home() {
                           onDragStart={(e) => { setDragItemId(item.id); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(item.id)); } catch (_) {} }}
                           onDragEnd={() => { setDragItemId(null); setDragOverFile(null); }}
                           onClick={() => { if (!dragItemId) { setOpenItem(item); setNotice(null); } }}
-                          style={{ background: '#fff', border: `${picked ? 2 : 1}px solid ${picked ? colors.ink : colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: picked ? '0 0 0 3px rgba(23,26,32,0.10)' : '0 1px 3px rgba(23,26,32,0.04)', opacity: dragItemId === item.id ? 0.4 : 1 }}
+                          style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)', opacity: dragItemId === item.id ? 0.4 : 1 }}
                         >
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setPickedItemId((p) => (String(p) === String(item.id) ? null : item.id)); setNotice(null); }}
-                            title="Move to a tab"
-                            aria-label="Move to a tab"
-                            style={{ position: 'absolute', top: 8, right: 8, padding: '4px 10px', borderRadius: 999, border: `1px solid ${picked ? colors.ink : colors.line}`, background: picked ? colors.ink : '#fff', color: picked ? '#fff' : colors.inkSoft, fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', zIndex: 2 }}
+                            onClick={(e) => { e.stopPropagation(); setSheetNewName(''); setMovingItem(item); }}
+                            title="Move to a folder"
+                            aria-label="Move to a folder"
+                            style={{ position: 'absolute', bottom: 10, right: 10, padding: '4px 10px', borderRadius: 999, border: `1px solid ${colors.line}`, background: '#fff', color: colors.inkSoft, fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', zIndex: 2 }}
                           >
-                            {picked ? 'Moving' : 'Move'}
+                            Move
                           </button>
                           {item.photos?.[0] ? (
                             <img src={item.photos[0]} alt="" draggable={false} style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
@@ -1224,6 +1248,68 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {movingItem && (
+        <div
+          onClick={() => setMovingItem(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 120 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 480, maxHeight: '80vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', padding: 20 }}>
+            <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 600, marginBottom: 2 }}>MOVE TO</div>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>
+              {movingItem.type === 'box' ? limitWords(movingItem.notes || 'Mixed box', 6) : limitWords(movingItem.name || 'Unidentified item', 6)}
+            </div>
+
+            {files.length === 0 && (
+              <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>No folders yet &mdash; make one below.</p>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+              {files.map((f) => {
+                const here = String(movingItem.file_id || '') === String(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => fileInto(movingItem, here ? 'unfiled' : f.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${here ? colors.ink : colors.line}`, background: here ? colors.bgAlt : '#fff', color: colors.ink, fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.inkSoft} strokeWidth="2" style={{ flexShrink: 0 }}>
+                      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                    </svg>
+                    <span style={{ flex: 1 }}>{f.name || 'Untitled'}</span>
+                    {here && <span style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 600 }}>Here now &middot; tap to remove</span>}
+                  </button>
+                );
+              })}
+            </div>
+
+            {movingItem.file_id && (
+              <button
+                type="button"
+                onClick={() => fileInto(movingItem, 'unfiled')}
+                style={{ width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${colors.line}`, background: '#fff', color: colors.inkSoft, fontSize: 14, fontWeight: 600, cursor: 'pointer', marginBottom: 14 }}
+              >
+                &#8617; Take out &mdash; back to the Silo
+              </button>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input
+                type="text"
+                placeholder="New folder name..."
+                value={sheetNewName}
+                onChange={(e) => setSheetNewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') createFolderInto(sheetNewName, movingItem); }}
+                style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+              />
+              <button type="button" onClick={() => createFolderInto(sheetNewName, movingItem)} disabled={!sheetNewName.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: sheetNewName.trim() ? 1 : 0.5 }}>Create</button>
+            </div>
+
+            <button type="button" onClick={() => setMovingItem(null)} style={{ ...outlineBtn, width: '100%' }}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {openItem && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 }}>
