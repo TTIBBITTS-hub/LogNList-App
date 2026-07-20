@@ -139,10 +139,16 @@ export default function Home() {
   const [logMode, setLogMode] = useState('item'); // 'item' or 'box'
 
   // Search matches name, category, box and notes — same fields as the artifact.
+  // A "file" is just a row with type 'file'. Real items are everything else.
+  const files = items.filter((i) => i.type === 'file');
+  const realItems = items.filter((i) => i.type !== 'file');
+  const itemsInFile = (fileId) =>
+    realItems.filter((i) => String(i.file_id || '') === String(fileId));
+
   const searchResults = (() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((i) =>
+    if (!q) return realItems;
+    return realItems.filter((i) =>
       (i.name || '').toLowerCase().includes(q) ||
       (i.category || '').toLowerCase().includes(q) ||
       (i.box || '').toLowerCase().includes(q) ||
@@ -165,6 +171,11 @@ export default function Home() {
   const [openItem, setOpenItem] = useState(null);
   const [valuationLoading, setValuationLoading] = useState(false);
   const [askingPrice, setAskingPrice] = useState('');
+
+  // Fileit
+  const [newFileName, setNewFileName] = useState('');
+  const [openFile, setOpenFile] = useState(null);   // a file row when viewing its contents
+  const [renameValue, setRenameValue] = useState('');
 
   useEffect(() => {
     loadItems();
@@ -552,6 +563,63 @@ export default function Home() {
     await loadItems();
   }
 
+  // ── Fileit ──────────────────────────────────────────────
+  async function createFile() {
+    const nm = newFileName.trim();
+    if (!nm) return;
+    await fetch('/api/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'file', name: nm }),
+    });
+    setNewFileName('');
+    setNotice(`File "${nm}" created.`);
+    await loadItems();
+  }
+
+  async function renameFile(file, nm) {
+    const v = (nm || '').trim();
+    if (!v) return;
+    const res = await fetch(`/api/items/${file.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: v }),
+    });
+    const data = await res.json();
+    setOpenFile(data.item);
+    setNotice('File renamed.');
+    await loadItems();
+  }
+
+  async function deleteFile(file) {
+    // Move any items out of the file first so nothing gets stranded.
+    const inside = items.filter(
+      (i) => i.type !== 'file' && String(i.file_id || '') === String(file.id)
+    );
+    for (const it of inside) {
+      await fetch(`/api/items/${it.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: null }),
+      });
+    }
+    await fetch(`/api/items/${file.id}`, { method: 'DELETE' });
+    setOpenFile(null);
+    setNotice('File deleted. Its items were kept.');
+    await loadItems();
+  }
+
+  async function assignFile(item, fileId) {
+    const res = await fetch(`/api/items/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: fileId || null }),
+    });
+    const data = await res.json();
+    setOpenItem(data.item);
+    await loadItems();
+  }
+
   const statusColors = {
     logged: { bg: colors.bgAlt, text: colors.inkSoft },
     listed: { bg: colors.successBg, text: colors.success },
@@ -596,10 +664,10 @@ export default function Home() {
         </header>
 
         <nav style={{ display: 'flex', background: colors.bg, borderBottom: `1px solid ${colors.line}` }}>
-          {['log', 'inventory', 'find'].map((t) => (
+          {['log', 'inventory', 'fileit', 'find'].map((t) => (
             <button
               key={t}
-              onClick={() => { setTab(t); setError(null); }}
+              onClick={() => { setTab(t); setError(null); setOpenFile(null); }}
               style={{
                 flex: 1, background: 'transparent', border: 'none',
                 borderBottom: `2px solid ${tab === t ? colors.ink : 'transparent'}`,
@@ -609,7 +677,7 @@ export default function Home() {
                 transition: 'color 0.15s ease',
               }}
             >
-              {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'LOGNLIST' : 'FIND IT'}
+              {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'LOGNLIST' : t === 'fileit' ? 'FILE-IT' : 'FIND IT'}
             </button>
           ))}
         </nav>
@@ -762,10 +830,10 @@ export default function Home() {
 
         {loaded && tab === 'inventory' && (
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>LogNList ({items.length})</h2>
-            {items.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 30 }}>Nothing logged yet.</p>}
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>LogNList ({realItems.length})</h2>
+            {realItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 30 }}>Nothing logged yet.</p>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
-              {items.map((item) => {
+              {realItems.map((item) => {
                 const isBox = item.type === 'box';
                 const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
                 return (
@@ -816,6 +884,128 @@ export default function Home() {
             </div>
           </div>
         )}
+        {loaded && tab === 'fileit' && !openFile && (
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Files ({files.length})</h2>
+            <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 16 }}>
+              Group items however you like &mdash; Books, Kids&rsquo; artwork, Sold, whatever suits.
+            </p>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 22 }}>
+              <input
+                type="text"
+                placeholder="Name a new file..."
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') createFile(); }}
+                style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={createFile}
+                disabled={!newFileName.trim()}
+                style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 20px', opacity: newFileName.trim() ? 1 : 0.5 }}
+              >
+                + Add
+              </button>
+            </div>
+
+            {files.length === 0 && (
+              <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 24, fontSize: 13.5 }}>
+                No files yet. Create one above, then open any item to file it away.
+              </p>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 14 }}>
+              {files.map((f) => {
+                const count = itemsInFile(f.id).length;
+                return (
+                  <div
+                    key={f.id}
+                    onClick={() => { setOpenFile(f); setRenameValue(f.name || ''); setNotice(null); }}
+                    style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 14, cursor: 'pointer', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
+                  >
+                    <FolderIcon />
+                    <div style={{ fontWeight: 600, fontSize: 14, marginTop: 10, marginBottom: 3 }}>{f.name || 'Untitled file'}</div>
+                    <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>{count} item{count === 1 ? '' : 's'}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {loaded && tab === 'fileit' && openFile && (
+          <div>
+            <button
+              type="button"
+              onClick={() => { setOpenFile(null); setNotice(null); }}
+              style={{ background: 'none', border: 'none', color: colors.inkSoft, fontWeight: 600, fontSize: 13.5, cursor: 'pointer', padding: '0 0 14px', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              &larr; All files
+            </button>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <input
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') renameFile(openFile, renameValue); }}
+                style={{ ...inputStyle, marginBottom: 0, flex: 1, fontSize: 18, fontWeight: 700 }}
+              />
+              <button
+                type="button"
+                onClick={() => renameFile(openFile, renameValue)}
+                disabled={!renameValue.trim() || renameValue.trim() === (openFile.name || '')}
+                style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: (!renameValue.trim() || renameValue.trim() === (openFile.name || '')) ? 0.5 : 1 }}
+              >
+                Rename
+              </button>
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <button
+                type="button"
+                onClick={() => { if (confirm(`Delete the file "${openFile.name}"? The items inside it are kept, just unfiled.`)) deleteFile(openFile); }}
+                style={{ background: 'none', border: 'none', color: colors.accent, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}
+              >
+                Delete this file
+              </button>
+            </div>
+
+            {itemsInFile(openFile.id).length === 0 ? (
+              <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '28px 0', fontSize: 13.5 }}>
+                Nothing filed here yet. Open an item and choose &ldquo;{openFile.name}&rdquo; under File.
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
+                {itemsInFile(openFile.id).map((item) => {
+                  const isBox = item.type === 'box';
+                  const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => { setOpenItem(item); setNotice(null); }}
+                      style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
+                    >
+                      {item.photos?.[0] ? (
+                        <img src={item.photos[0]} alt="" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
+                      ) : (
+                        <div style={{ width: 50, height: 50, background: colors.bgAlt, borderRadius: 9, marginBottom: 10 }} />
+                      )}
+                      <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
+                        {isBox ? limitWords(item.notes || 'Mixed box', 6) : limitWords(item.name || 'Unidentified item', 6)}
+                      </div>
+                      <span style={{ display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '3px 8px', borderRadius: 999, background: sc.bg, color: sc.text }}>
+                        {isBox ? 'MIXED BOX' : item.status?.toUpperCase()}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {loaded && tab === 'find' && (
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Find it</h2>
@@ -963,6 +1153,20 @@ export default function Home() {
               <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 16 }}>
                 Box: {openItem.box} &middot; {openItem.category || 'uncategorised'}
               </p>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>FILE</span>
+                <select
+                  value={openItem.file_id || ''}
+                  onChange={(e) => assignFile(openItem, e.target.value)}
+                  style={{ flex: 1, padding: '10px 12px', border: `1.5px solid ${colors.line}`, borderRadius: 10, background: colors.bgAlt, fontSize: 14, color: colors.ink, cursor: 'pointer', boxSizing: 'border-box' }}
+                >
+                  <option value="">&mdash; Not filed &mdash;</option>
+                  {files.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
 
               {openItem.estimate ? (
                 <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
@@ -1184,6 +1388,14 @@ function MatrixRain() {
         </div>
       ))}
     </div>
+  );
+}
+
+function FolderIcon({ size = 34 }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={colors.ink} strokeWidth="1.5" style={{ width: size, height: size, display: 'block' }}>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+    </svg>
   );
 }
 
