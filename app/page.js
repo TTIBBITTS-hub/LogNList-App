@@ -1008,14 +1008,19 @@ export default function Home() {
                 }}
                 style={{
                   flex: '0 0 auto', whiteSpace: 'nowrap', cursor: fileObj ? 'grab' : 'pointer',
-                  padding: '9px 15px', borderRadius: 999, fontSize: 13, fontWeight: 600,
+                  padding: '9px 15px', borderRadius: '11px 11px 3px 3px', fontSize: 13, fontWeight: 600,
                   border: tabOver ? `2px solid ${colors.ink}` : (itemOver ? `2px dashed ${colors.success}` : `1.5px solid ${active ? colors.ink : colors.line}`),
                   background: itemOver ? colors.successBg : (active ? colors.ink : '#fff'),
                   color: itemOver ? colors.success : (active ? '#fff' : colors.inkSoft),
                   transition: 'background 0.12s ease, color 0.12s ease',
                 }}
               >
-                {label} ({count})
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                  </svg>
+                  {label} ({count})
+                </span>
               </button>
             );
           };
@@ -1032,7 +1037,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => { setShowNewFile(true); setNewFileName(''); }}
-                  style={{ flex: '0 0 auto', whiteSpace: 'nowrap', cursor: 'pointer', padding: '9px 15px', borderRadius: 999, fontSize: 13, fontWeight: 600, border: `1.5px dashed ${colors.line}`, background: colors.bgAlt, color: colors.inkSoft }}
+                  style={{ flex: '0 0 auto', whiteSpace: 'nowrap', cursor: 'pointer', padding: '9px 15px', borderRadius: '11px 11px 3px 3px', fontSize: 13, fontWeight: 600, border: `1.5px dashed ${colors.line}`, background: colors.bgAlt, color: colors.inkSoft }}
                 >
                   + New tab
                 </button>
