@@ -1066,19 +1066,23 @@ export default function Home() {
                       <button type="button" onClick={() => setEditingName(false)} style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 16px' }}>Cancel</button>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                      {(() => {
-                        const pos = files.findIndex((f) => String(f.id) === String(selectedFile.id));
-                        const arrow = (label, dir, disabled) => (
-                          <button type="button" disabled={disabled} onClick={() => nudgeFile(selectedFile, dir)} style={{ background: 'none', border: 'none', color: disabled ? colors.line : colors.inkSoft, fontSize: 12.5, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', padding: '2px 0' }}>{label}</button>
-                        );
-                        return (<>
-                          {arrow('\u25C0 Move left', -1, pos <= 0)}
-                          {arrow('Move right \u25B6', 1, pos < 0 || pos >= files.length - 1)}
-                        </>);
-                      })()}
-                      <button type="button" onClick={() => { setEditingName(true); setRenameValue(selectedFile.name || ''); }} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Rename tab</button>
-                      <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" tab? The items in it are kept, just moved back to Silo.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: 'none', color: colors.accent, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Delete tab</button>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
+                        {(() => {
+                          const pos = files.findIndex((f) => String(f.id) === String(selectedFile.id));
+                          const arrow = (label, dir, disabled) => (
+                            <button type="button" disabled={disabled} onClick={() => nudgeFile(selectedFile, dir)} style={{ background: 'none', border: 'none', color: disabled ? colors.line : colors.inkSoft, fontSize: 12.5, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', padding: '2px 0' }}>{label}</button>
+                          );
+                          return (<>
+                            {arrow('\u25C0 Move left', -1, pos <= 0)}
+                            {arrow('Move right \u25B6', 1, pos < 0 || pos >= files.length - 1)}
+                          </>);
+                        })()}
+                        <button type="button" onClick={() => { setEditingName(true); setRenameValue(selectedFile.name || ''); }} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Rename tab</button>
+                      </div>
+                      <div style={{ textAlign: 'center', marginTop: 18 }}>
+                        <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" tab? The items in it are kept, just moved back to Silo.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: `1px solid ${colors.line}`, color: colors.inkFaint, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '6px 14px', borderRadius: 999 }}>Delete tab</button>
+                      </div>
                     </div>
                   )}
                 </div>
