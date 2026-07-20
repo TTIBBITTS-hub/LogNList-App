@@ -772,6 +772,13 @@ export default function Home() {
         .act { transition: background 0.08s ease, border-color 0.08s ease, transform 0.08s ease; }
 
         @keyframes rain-in { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Brand-green scrollbars */
+        ::-webkit-scrollbar { height: 12px; width: 10px; }
+        ::-webkit-scrollbar-track { background: #F4F4F5; }
+        ::-webkit-scrollbar-thumb { background: #7CCB2B; border-radius: 999px; border: 3px solid #F4F4F5; }
+        ::-webkit-scrollbar-thumb:hover { background: #6FB824; }
+        html { scrollbar-color: #7CCB2B #F4F4F5; }
       `}</style>
       <div style={{ position: 'sticky', top: 0, zIndex: 50, background: colors.bg }}>
         <header style={{ background: colors.ink, padding: '30px 24px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px 16px' }}>
