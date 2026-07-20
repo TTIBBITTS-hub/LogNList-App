@@ -172,10 +172,14 @@ export default function Home() {
   const [valuationLoading, setValuationLoading] = useState(false);
   const [askingPrice, setAskingPrice] = useState('');
 
-  // Fileit
+  // File-it
   const [newFileName, setNewFileName] = useState('');
-  const [openFile, setOpenFile] = useState(null);   // a file row when viewing its contents
+  const [showNewFile, setShowNewFile] = useState(false);
+  const [selectedFileId, setSelectedFileId] = useState('unfiled'); // 'unfiled' or a file id
   const [renameValue, setRenameValue] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [dragItemId, setDragItemId] = useState(null);
+  const [dragOverFile, setDragOverFile] = useState(null);
 
   useEffect(() => {
     loadItems();
@@ -567,13 +571,16 @@ export default function Home() {
   async function createFile() {
     const nm = newFileName.trim();
     if (!nm) return;
-    await fetch('/api/items', {
+    const res = await fetch('/api/items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'file', name: nm }),
     });
+    const data = await res.json();
     setNewFileName('');
-    setNotice(`File "${nm}" created.`);
+    setShowNewFile(false);
+    if (data.item?.id) setSelectedFileId(data.item.id);
+    setNotice(`Tab "${nm}" created.`);
     await loadItems();
   }
 
@@ -586,7 +593,7 @@ export default function Home() {
       body: JSON.stringify({ name: v }),
     });
     const data = await res.json();
-    setOpenFile(data.item);
+    setEditingName(false);
     setNotice('File renamed.');
     await loadItems();
   }
@@ -604,8 +611,19 @@ export default function Home() {
       });
     }
     await fetch(`/api/items/${file.id}`, { method: 'DELETE' });
-    setOpenFile(null);
+    setSelectedFileId('unfiled');
     setNotice('File deleted. Its items were kept.');
+    await loadItems();
+  }
+
+  // Drag an item tile onto a tab to file it there ('unfiled' clears the file).
+  async function moveItemToFile(itemId, fileId) {
+    if (!itemId) return;
+    await fetch(`/api/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: fileId === 'unfiled' ? null : fileId }),
+    });
     await loadItems();
   }
 
@@ -667,7 +685,7 @@ export default function Home() {
           {['log', 'inventory', 'fileit', 'find'].map((t) => (
             <button
               key={t}
-              onClick={() => { setTab(t); setError(null); setOpenFile(null); }}
+              onClick={() => { setTab(t); setError(null); }}
               style={{
                 flex: 1, background: 'transparent', border: 'none',
                 borderBottom: `2px solid ${tab === t ? colors.ink : 'transparent'}`,
@@ -884,127 +902,134 @@ export default function Home() {
             </div>
           </div>
         )}
-        {loaded && tab === 'fileit' && !openFile && (
-          <div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Files ({files.length})</h2>
-            <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 16 }}>
-              Group items however you like &mdash; Books, Kids&rsquo; artwork, Sold, whatever suits.
-            </p>
-
-            <div style={{ display: 'flex', gap: 8, marginBottom: 22 }}>
-              <input
-                type="text"
-                placeholder="Name a new file..."
-                value={newFileName}
-                onChange={(e) => setNewFileName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') createFile(); }}
-                style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
-              />
+        {loaded && tab === 'fileit' && (() => {
+          const selectedFile = files.find((f) => String(f.id) === String(selectedFileId));
+          const unfiledItems = realItems.filter((i) => !i.file_id);
+          const shownItems = selectedFileId === 'unfiled' ? unfiledItems : itemsInFile(selectedFileId);
+          const tabPill = (id, label, count) => {
+            const active = String(selectedFileId) === String(id);
+            const over = dragOverFile === id;
+            return (
               <button
+                key={id}
                 type="button"
-                onClick={createFile}
-                disabled={!newFileName.trim()}
-                style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 20px', opacity: newFileName.trim() ? 1 : 0.5 }}
+                onClick={() => { setSelectedFileId(id); setEditingName(false); setNotice(null); }}
+                onDragOver={(e) => { e.preventDefault(); if (dragOverFile !== id) setDragOverFile(id); }}
+                onDragLeave={() => setDragOverFile((p) => (p === id ? null : p))}
+                onDrop={(e) => { e.preventDefault(); moveItemToFile(dragItemId, id); setDragOverFile(null); setDragItemId(null); }}
+                style={{
+                  flex: '0 0 auto', whiteSpace: 'nowrap', cursor: 'pointer',
+                  padding: '9px 15px', borderRadius: 999, fontSize: 13, fontWeight: 600,
+                  border: over ? `2px dashed ${colors.success}` : `1.5px solid ${active ? colors.ink : colors.line}`,
+                  background: over ? colors.successBg : (active ? colors.ink : '#fff'),
+                  color: over ? colors.success : (active ? '#fff' : colors.inkSoft),
+                  transition: 'background 0.12s ease, color 0.12s ease',
+                }}
               >
-                + Add
+                {label} ({count})
               </button>
-            </div>
-
-            {files.length === 0 && (
-              <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 24, fontSize: 13.5 }}>
-                No files yet. Create one above, then open any item to file it away.
+            );
+          };
+          return (
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>File-it</h2>
+              <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>
+                Make a tab, then drag any item onto it to file it away.
               </p>
-            )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 14 }}>
-              {files.map((f) => {
-                const count = itemsInFile(f.id).length;
-                return (
-                  <div
-                    key={f.id}
-                    onClick={() => { setOpenFile(f); setRenameValue(f.name || ''); setNotice(null); }}
-                    style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 14, cursor: 'pointer', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
-                  >
-                    <FolderIcon />
-                    <div style={{ fontWeight: 600, fontSize: 14, marginTop: 10, marginBottom: 3 }}>{f.name || 'Untitled file'}</div>
-                    <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>{count} item{count === 1 ? '' : 's'}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {loaded && tab === 'fileit' && openFile && (
-          <div>
-            <button
-              type="button"
-              onClick={() => { setOpenFile(null); setNotice(null); }}
-              style={{ background: 'none', border: 'none', color: colors.inkSoft, fontWeight: 600, fontSize: 13.5, cursor: 'pointer', padding: '0 0 14px', display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              &larr; All files
-            </button>
-
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <input
-                type="text"
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') renameFile(openFile, renameValue); }}
-                style={{ ...inputStyle, marginBottom: 0, flex: 1, fontSize: 18, fontWeight: 700 }}
-              />
-              <button
-                type="button"
-                onClick={() => renameFile(openFile, renameValue)}
-                disabled={!renameValue.trim() || renameValue.trim() === (openFile.name || '')}
-                style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: (!renameValue.trim() || renameValue.trim() === (openFile.name || '')) ? 0.5 : 1 }}
-              >
-                Rename
-              </button>
-            </div>
-            <div style={{ marginBottom: 18 }}>
-              <button
-                type="button"
-                onClick={() => { if (confirm(`Delete the file "${openFile.name}"? The items inside it are kept, just unfiled.`)) deleteFile(openFile); }}
-                style={{ background: 'none', border: 'none', color: colors.accent, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}
-              >
-                Delete this file
-              </button>
-            </div>
-
-            {itemsInFile(openFile.id).length === 0 ? (
-              <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '28px 0', fontSize: 13.5 }}>
-                Nothing filed here yet. Open an item and choose &ldquo;{openFile.name}&rdquo; under File.
-              </p>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
-                {itemsInFile(openFile.id).map((item) => {
-                  const isBox = item.type === 'box';
-                  const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => { setOpenItem(item); setNotice(null); }}
-                      style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
-                    >
-                      {item.photos?.[0] ? (
-                        <img src={item.photos[0]} alt="" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
-                      ) : (
-                        <div style={{ width: 50, height: 50, background: colors.bgAlt, borderRadius: 9, marginBottom: 10 }} />
-                      )}
-                      <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
-                        {isBox ? limitWords(item.notes || 'Mixed box', 6) : limitWords(item.name || 'Unidentified item', 6)}
-                      </div>
-                      <span style={{ display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '3px 8px', borderRadius: 999, background: sc.bg, color: sc.text }}>
-                        {isBox ? 'MIXED BOX' : item.status?.toUpperCase()}
-                      </span>
-                    </div>
-                  );
-                })}
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
+                {tabPill('unfiled', 'Unfiled', unfiledItems.length)}
+                {files.map((f) => tabPill(f.id, f.name || 'Untitled', itemsInFile(f.id).length))}
+                <button
+                  type="button"
+                  onClick={() => { setShowNewFile(true); setNewFileName(''); }}
+                  style={{ flex: '0 0 auto', whiteSpace: 'nowrap', cursor: 'pointer', padding: '9px 15px', borderRadius: 999, fontSize: 13, fontWeight: 600, border: `1.5px dashed ${colors.line}`, background: colors.bgAlt, color: colors.inkSoft }}
+                >
+                  + New tab
+                </button>
               </div>
-            )}
-          </div>
-        )}
+
+              {showNewFile && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Name the tab &mdash; e.g. Books, Sold, Kids' art"
+                    value={newFileName}
+                    onChange={(e) => setNewFileName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') createFile(); if (e.key === 'Escape') { setShowNewFile(false); setNewFileName(''); } }}
+                    style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+                  />
+                  <button type="button" onClick={createFile} disabled={!newFileName.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: newFileName.trim() ? 1 : 0.5 }}>Add</button>
+                  <button type="button" onClick={() => { setShowNewFile(false); setNewFileName(''); }} style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 16px' }}>Cancel</button>
+                </div>
+              )}
+
+              {selectedFile && (
+                <div style={{ marginTop: 16, marginBottom: 4 }}>
+                  {editingName ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="text"
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') renameFile(selectedFile, renameValue); if (e.key === 'Escape') setEditingName(false); }}
+                        style={{ ...inputStyle, marginBottom: 0, flex: 1, fontWeight: 700 }}
+                      />
+                      <button type="button" onClick={() => renameFile(selectedFile, renameValue)} disabled={!renameValue.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: renameValue.trim() ? 1 : 0.5 }}>Save</button>
+                      <button type="button" onClick={() => setEditingName(false)} style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 16px' }}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <button type="button" onClick={() => { setEditingName(true); setRenameValue(selectedFile.name || ''); }} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Rename tab</button>
+                      <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" tab? The items in it are kept, just moved back to Unfiled.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: 'none', color: colors.accent, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Delete tab</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ marginTop: 18 }}>
+                {shownItems.length === 0 ? (
+                  <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '30px 0', fontSize: 13.5 }}>
+                    {selectedFileId === 'unfiled'
+                      ? 'Nothing loose here \u2014 every item is filed.'
+                      : `Nothing in this tab yet. Open the Unfiled tab, then drag items up onto "${selectedFile?.name}".`}
+                  </p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
+                    {shownItems.map((item) => {
+                      const isBox = item.type === 'box';
+                      const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
+                      return (
+                        <div
+                          key={item.id}
+                          draggable
+                          onDragStart={(e) => { setDragItemId(item.id); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(item.id)); } catch (_) {} }}
+                          onDragEnd={() => { setDragItemId(null); setDragOverFile(null); }}
+                          onClick={() => { if (!dragItemId) { setOpenItem(item); setNotice(null); } }}
+                          style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'grab', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)', opacity: dragItemId === item.id ? 0.4 : 1 }}
+                        >
+                          {item.photos?.[0] ? (
+                            <img src={item.photos[0]} alt="" draggable={false} style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
+                          ) : (
+                            <div style={{ width: 50, height: 50, background: colors.bgAlt, borderRadius: 9, marginBottom: 10 }} />
+                          )}
+                          <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
+                            {isBox ? limitWords(item.notes || 'Mixed box', 6) : limitWords(item.name || 'Unidentified item', 6)}
+                          </div>
+                          <span style={{ display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '3px 8px', borderRadius: 999, background: sc.bg, color: sc.text }}>
+                            {isBox ? 'MIXED BOX' : item.status?.toUpperCase()}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {loaded && tab === 'find' && (
           <div>
