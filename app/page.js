@@ -1009,7 +1009,7 @@ export default function Home() {
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>File-it</h2>
               <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>
-                Tap an item to pick it up, then tap a tab to file it. Drag tabs to reorder them (or use the arrows on a selected tab).
+                Tap an item to open it. To file it, hit <strong>Move</strong> then tap a tab &mdash; or drag it on a computer. Drag tabs to reorder.
               </p>
 
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
@@ -1103,17 +1103,17 @@ export default function Home() {
                           draggable
                           onDragStart={(e) => { setDragItemId(item.id); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(item.id)); } catch (_) {} }}
                           onDragEnd={() => { setDragItemId(null); setDragOverFile(null); }}
-                          onClick={() => { if (!dragItemId) setPickedItemId((p) => (String(p) === String(item.id) ? null : item.id)); }}
+                          onClick={() => { if (!dragItemId) { setOpenItem(item); setNotice(null); } }}
                           style={{ background: '#fff', border: `${picked ? 2 : 1}px solid ${picked ? colors.ink : colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: picked ? '0 0 0 3px rgba(23,26,32,0.10)' : '0 1px 3px rgba(23,26,32,0.04)', opacity: dragItemId === item.id ? 0.4 : 1 }}
                         >
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setPickedItemId(null); setOpenItem(item); setNotice(null); }}
-                            title="Open details"
-                            aria-label="Open details"
-                            style={{ position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: '50%', border: `1px solid ${colors.line}`, background: '#fff', color: colors.inkSoft, fontSize: 15, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}
+                            onClick={(e) => { e.stopPropagation(); setPickedItemId((p) => (String(p) === String(item.id) ? null : item.id)); setNotice(null); }}
+                            title="Move to a tab"
+                            aria-label="Move to a tab"
+                            style={{ position: 'absolute', top: 8, right: 8, padding: '4px 10px', borderRadius: 999, border: `1px solid ${picked ? colors.ink : colors.line}`, background: picked ? colors.ink : '#fff', color: picked ? '#fff' : colors.inkSoft, fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', zIndex: 2 }}
                           >
-                            &#8942;
+                            {picked ? 'Moving' : 'Move'}
                           </button>
                           {item.photos?.[0] ? (
                             <img src={item.photos[0]} alt="" draggable={false} style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
