@@ -180,6 +180,7 @@ export default function Home() {
   const [editingName, setEditingName] = useState(false);
   const [dragItemId, setDragItemId] = useState(null);
   const [dragOverFile, setDragOverFile] = useState(null);
+  const [pickedItemId, setPickedItemId] = useState(null);
 
   useEffect(() => {
     loadItems();
@@ -616,15 +617,21 @@ export default function Home() {
     await loadItems();
   }
 
-  // Drag an item tile onto a tab to file it there ('unfiled' clears the file).
+  // Drag/tap an item onto a tab to file it there ('unfiled' clears the file).
+  // Optimistic: update the screen immediately, then save in the background.
   async function moveItemToFile(itemId, fileId) {
     if (!itemId) return;
-    await fetch(`/api/items/${itemId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_id: fileId === 'unfiled' ? null : fileId }),
-    });
-    await loadItems();
+    const target = fileId === 'unfiled' ? null : fileId;
+    setItems((prev) => prev.map((i) => (String(i.id) === String(itemId) ? { ...i, file_id: target } : i)));
+    try {
+      await fetch(`/api/items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: target }),
+      });
+    } catch (e) {
+      await loadItems(); // put it back if the save failed
+    }
   }
 
   async function assignFile(item, fileId) {
@@ -906,14 +913,15 @@ export default function Home() {
           const selectedFile = files.find((f) => String(f.id) === String(selectedFileId));
           const unfiledItems = realItems.filter((i) => !i.file_id);
           const shownItems = selectedFileId === 'unfiled' ? unfiledItems : itemsInFile(selectedFileId);
+          const picking = !!pickedItemId;
           const tabPill = (id, label, count) => {
             const active = String(selectedFileId) === String(id);
-            const over = dragOverFile === id;
+            const over = (dragOverFile === id) || picking;
             return (
               <button
                 key={id}
                 type="button"
-                onClick={() => { setSelectedFileId(id); setEditingName(false); setNotice(null); }}
+                onClick={() => { if (pickedItemId) { moveItemToFile(pickedItemId, id); setPickedItemId(null); } else { setSelectedFileId(id); setEditingName(false); setNotice(null); } }}
                 onDragOver={(e) => { e.preventDefault(); if (dragOverFile !== id) setDragOverFile(id); }}
                 onDragLeave={() => setDragOverFile((p) => (p === id ? null : p))}
                 onDrop={(e) => { e.preventDefault(); moveItemToFile(dragItemId, id); setDragOverFile(null); setDragItemId(null); }}
@@ -934,7 +942,7 @@ export default function Home() {
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>File-it</h2>
               <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>
-                Make a tab, then drag any item onto it to file it away.
+                Tap an item to pick it up, then tap a tab to file it. (On a computer you can drag instead.)
               </p>
 
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
@@ -948,6 +956,16 @@ export default function Home() {
                   + New tab
                 </button>
               </div>
+
+              {pickedItemId && (() => {
+                const picked = realItems.find((i) => String(i.id) === String(pickedItemId));
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, padding: '10px 14px', background: colors.ink, color: '#fff', borderRadius: 12, fontSize: 13 }}>
+                    <span style={{ flex: 1 }}>Moving <strong>{picked ? limitWords(picked.name || picked.notes || 'item', 5) : 'item'}</strong> &mdash; tap a tab above to drop it in.</span>
+                    <button type="button" onClick={() => setPickedItemId(null)} style={{ background: 'rgba(255,255,255,0.16)', border: 'none', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '6px 12px', borderRadius: 999, cursor: 'pointer', flex: '0 0 auto' }}>Cancel</button>
+                  </div>
+                );
+              })()}
 
               {showNewFile && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
@@ -1001,14 +1019,15 @@ export default function Home() {
                     {shownItems.map((item) => {
                       const isBox = item.type === 'box';
                       const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
+                      const picked = String(pickedItemId) === String(item.id);
                       return (
                         <div
                           key={item.id}
                           draggable
                           onDragStart={(e) => { setDragItemId(item.id); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(item.id)); } catch (_) {} }}
                           onDragEnd={() => { setDragItemId(null); setDragOverFile(null); }}
-                          onClick={() => { if (!dragItemId) { setOpenItem(item); setNotice(null); } }}
-                          style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'grab', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)', opacity: dragItemId === item.id ? 0.4 : 1 }}
+                          onClick={() => { if (!dragItemId) setPickedItemId((p) => (String(p) === String(item.id) ? null : item.id)); }}
+                          style={{ background: '#fff', border: `${picked ? 2 : 1}px solid ${picked ? colors.ink : colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: picked ? '0 0 0 3px rgba(23,26,32,0.10)' : '0 1px 3px rgba(23,26,32,0.04)', opacity: dragItemId === item.id ? 0.4 : 1 }}
                         >
                           {item.photos?.[0] ? (
                             <img src={item.photos[0]} alt="" draggable={false} style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
