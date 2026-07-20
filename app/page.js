@@ -617,7 +617,7 @@ export default function Home() {
     setNewFileName('');
     setShowNewFile(false);
     if (data.item?.id) setSelectedFileId(data.item.id);
-    setNotice(`Tab "${nm}" created.`);
+    setNotice(`File "${nm}" created.`);
     await loadItems();
   }
 
@@ -1048,6 +1048,8 @@ export default function Home() {
             const active = String(activeId) === String(id);
             const itemOver = ((dragOverFile === id) || picking) && !dragTabId;
             const tabOver = dragTabId && dragOverTab === id && String(dragTabId) !== String(id);
+            const bg = itemOver ? '#7CCB2B' : tabOver ? '#D89F30' : active ? '#E9AF3C' : '#F5CE73';
+            const fg = itemOver ? '#171A20' : active ? '#4E370A' : '#6E4E12';
             return (
               <button
                 key={id}
@@ -1064,20 +1066,14 @@ export default function Home() {
                   else { moveItemToFile(dragItemId, id); setDragOverFile(null); setDragItemId(null); }
                 }}
                 style={{
-                  flex: '0 0 auto', whiteSpace: 'nowrap', cursor: fileObj ? 'grab' : 'pointer',
-                  padding: '9px 15px', borderRadius: '11px 11px 3px 3px', fontSize: 13, fontWeight: 600,
-                  border: tabOver ? `2px solid ${colors.ink}` : (itemOver ? `2px dashed ${colors.success}` : `1.5px solid ${active ? colors.ink : colors.line}`),
-                  background: itemOver ? colors.successBg : (active ? colors.ink : '#fff'),
-                  color: itemOver ? colors.success : (active ? '#fff' : colors.inkSoft),
+                  position: 'relative', flex: '0 0 auto', whiteSpace: 'nowrap', cursor: fileObj ? 'grab' : 'pointer',
+                  padding: '11px 16px 12px', border: 'none', background: bg, color: fg,
+                  borderRadius: '2px 10px 10px 10px', fontSize: 13, fontWeight: 600,
                   transition: 'background 0.12s ease, color 0.12s ease',
                 }}
               >
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
-                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
-                  </svg>
-                  {label} ({count})
-                </span>
+                <span style={{ position: 'absolute', top: -10, left: 0, width: 38, height: 11, background: bg, borderRadius: '6px 6px 0 0', transition: 'background 0.12s ease' }} />
+                {label} ({count})
               </button>
             );
           };
@@ -1085,18 +1081,19 @@ export default function Home() {
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>File-it</h2>
               <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>
-                The <strong>Silo</strong> holds everything you&rsquo;ve logged. Hit <strong>Move</strong> on an item to file it into a folder. Drag tabs to reorder.
+                The <strong>Silo</strong> holds everything you&rsquo;ve logged. Hit <strong>Move</strong> on an item to file it into a folder. Drag folders to reorder.
               </p>
 
-              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', overflowX: 'auto', padding: '14px 0 12px', marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
                 {tabPill('unfiled', 'Silo', unfiledItems.length)}
                 {files.map((f) => tabPill(f.id, f.name || 'Untitled', itemsInFile(f.id).length, f))}
                 <button
                   type="button"
                   onClick={() => { setShowNewFile(true); setNewFileName(''); }}
-                  style={{ flex: '0 0 auto', whiteSpace: 'nowrap', cursor: 'pointer', padding: '9px 15px', borderRadius: '11px 11px 3px 3px', fontSize: 13, fontWeight: 600, border: `1.5px dashed ${colors.line}`, background: colors.bgAlt, color: colors.inkSoft }}
+                  style={{ position: 'relative', flex: '0 0 auto', whiteSpace: 'nowrap', cursor: 'pointer', padding: '11px 16px 12px', border: 'none', background: '#F1E7CE', color: colors.inkFaint, borderRadius: '2px 10px 10px 10px', fontSize: 13, fontWeight: 600 }}
                 >
-                  + New tab
+                  <span style={{ position: 'absolute', top: -10, left: 0, width: 38, height: 11, background: '#F1E7CE', borderRadius: '6px 6px 0 0' }} />
+                  + New
                 </button>
               </div>
 
@@ -1105,7 +1102,7 @@ export default function Home() {
                   <input
                     type="text"
                     autoFocus
-                    placeholder="Name the tab &mdash; e.g. Books, Sold, Kids' art"
+                    placeholder="Name the file &mdash; e.g. Books, Sold, Kids' art"
                     value={newFileName}
                     onChange={(e) => setNewFileName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') createFile(); if (e.key === 'Escape') { setShowNewFile(false); setNewFileName(''); } }}
@@ -1144,10 +1141,10 @@ export default function Home() {
                             {arrow('Move right \u25B6', 1, pos < 0 || pos >= files.length - 1)}
                           </>);
                         })()}
-                        <button type="button" onClick={() => { setEditingName(true); setRenameValue(selectedFile.name || ''); }} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Rename tab</button>
+                        <button type="button" onClick={() => { setEditingName(true); setRenameValue(selectedFile.name || ''); }} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Rename file</button>
                       </div>
                       <div style={{ textAlign: 'center', marginTop: 18 }}>
-                        <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" tab? The items in it are kept, just moved back to the Silo.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: `1px solid ${colors.line}`, color: colors.inkFaint, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '6px 14px', borderRadius: 999 }}>Delete tab</button>
+                        <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" file? The items in it are kept, just moved back to the Silo.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: `1px solid ${colors.line}`, color: colors.inkFaint, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '6px 14px', borderRadius: 999 }}>Delete file</button>
                       </div>
                     </div>
                   )}
@@ -1159,7 +1156,7 @@ export default function Home() {
                   <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '30px 20px', fontSize: 13.5, lineHeight: 1.5 }}>
                     {showingSilo
                       ? 'The Silo is empty \u2014 log something, or it\u2019s all been filed into folders.'
-                      : <>Nothing in &ldquo;{selectedFile?.name}&rdquo; yet. In the <strong>Silo</strong> tab, hit <strong>Move</strong> on an item and pick this folder.</>}
+                      : <>Nothing in &ldquo;{selectedFile?.name}&rdquo; yet. In the <strong>Silo</strong>, hit <strong>Move</strong> on an item and pick this file.</>}
                   </p>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
