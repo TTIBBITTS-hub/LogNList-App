@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // LogNList wordmark, inlined so there's no public/ folder to get wrong.
 const LOGO_WORDMARK = 'data:image/png;base64,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';
@@ -161,15 +161,19 @@ export default function Home() {
     return (f.category !== '' && f.category != null && !isNaN(n)) ? n : 1e9;
   };
   const files = items.filter((i) => i.type === 'file').sort((a, b) => filePos(a) - filePos(b));
-  const realItems = items.filter((i) => i.type !== 'file');
+  const realItems = items.filter((i) => i.type !== 'file' && i.type !== 'book');
+  const books = items.filter((i) => i.type === 'book');
+  const findableItems = items.filter((i) => i.type !== 'file');
   const unfiledItems = realItems.filter((i) => !i.file_id);
   const itemsInFile = (fileId) =>
     realItems.filter((i) => String(i.file_id || '') === String(fileId));
 
   const searchResults = (() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return realItems;
-    return realItems.filter((i) =>
+    if (!q) return findableItems;
+    return findableItems.filter((i) =>
+      (i.name || '').toLowerCase().includes(q) ||
+      (i.author || '').toLowerCase().includes(q) ||
       (i.name || '').toLowerCase().includes(q) ||
       (i.category || '').toLowerCase().includes(q) ||
       (i.box || '').toLowerCase().includes(q) ||
@@ -204,12 +208,34 @@ export default function Home() {
   const [pickedItemId, setPickedItemId] = useState(null);
   const [movingItem, setMovingItem] = useState(null);   // item shown in the "move to folder" sheet
   const [sheetNewName, setSheetNewName] = useState('');
+
+  // Library / Add a book
+  const [addingBook, setAddingBook] = useState(false);
+  const [bookStep, setBookStep] = useState('scan');       // 'scan' | 'search' | 'confirm'
+  const [bookBusy, setBookBusy] = useState(false);
+  const [bookError, setBookError] = useState(null);
+  const [bookDraft, setBookDraft] = useState(null);       // {title, author, year, isbn, cover}
+  const [bookBox, setBookBox] = useState('');
+  const [bookOwnPhoto, setBookOwnPhoto] = useState(null); // base64 second photo
+  const [bookIsbnInput, setBookIsbnInput] = useState('');
+  const [bookSearchQuery, setBookSearchQuery] = useState('');
+  const [bookSearchResults, setBookSearchResults] = useState([]);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [scanActive, setScanActive] = useState(false);
+  const [scanSupported, setScanSupported] = useState(true);
+  const videoRef = useRef(null);
+  const scannerRef = useRef(null);
   const [dragTabId, setDragTabId] = useState(null);
   const [dragOverTab, setDragOverTab] = useState(null);
 
   useEffect(() => {
     loadItems();
   }, []);
+
+  useEffect(() => {
+    if (addingBook && bookStep === 'scan') { startScan(); }
+    return () => { stopScan(); };
+  }, [addingBook, bookStep]);
 
   async function loadItems() {
     try {
@@ -711,6 +737,133 @@ export default function Home() {
     else await loadItems();
   }
 
+  // ── Library / Add a book ─────────────────────────────────
+  function openAddBook() {
+    setBookDraft(null); setBookBox(''); setBookOwnPhoto(null);
+    setBookIsbnInput(''); setBookSearchQuery(''); setBookSearchResults([]);
+    setBookError(null); setBookStep('scan'); setScanSupported(true);
+    setAddingBook(true);
+  }
+  function closeAddBook() { stopScan(); setAddingBook(false); }
+
+  function loadZXing() {
+    return new Promise((resolve, reject) => {
+      if (window.ZXing) return resolve(window.ZXing);
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+      s.onload = () => resolve(window.ZXing);
+      s.onerror = () => reject(new Error('scanner load failed'));
+      document.head.appendChild(s);
+    });
+  }
+  async function startScan() {
+    setBookError(null);
+    try {
+      const ZX = await loadZXing();
+      const reader = new ZX.BrowserMultiFormatReader();
+      scannerRef.current = reader;
+      setScanActive(true);
+      await reader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        videoRef.current,
+        (result) => { if (result) { const t = result.getText(); stopScan(); lookupIsbn(t); } }
+      );
+    } catch (e) {
+      setScanSupported(false); setScanActive(false);
+      setBookError("Camera scanning isn't available here \u2014 type the ISBN or search by title instead.");
+    }
+  }
+  function stopScan() {
+    try { if (scannerRef.current) scannerRef.current.reset(); } catch (_) {}
+    scannerRef.current = null; setScanActive(false);
+  }
+
+  async function lookupIsbn(isbn) {
+    const clean = String(isbn || '').replace(/[^0-9Xx]/g, '');
+    if (!clean) return;
+    setBookBusy(true); setBookError(null); setBookStep('confirm');
+    try {
+      const res = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${clean}&format=json&jscmd=data`);
+      const data = await res.json();
+      const rec = data[`ISBN:${clean}`];
+      if (rec) {
+        setBookDraft({
+          title: rec.title || '',
+          author: (rec.authors || []).map((a) => a.name).join(', '),
+          year: ((rec.publish_date || '').match(/\d{4}/) || [''])[0],
+          isbn: clean,
+          cover: (rec.cover && (rec.cover.large || rec.cover.medium)) || `https://covers.openlibrary.org/b/isbn/${clean}-L.jpg`,
+        });
+      } else {
+        setBookDraft({ title: '', author: '', year: '', isbn: clean, cover: '' });
+        setBookError("Couldn't find that ISBN \u2014 fill in the details yourself, or search by title.");
+      }
+    } catch (e) {
+      setBookDraft({ title: '', author: '', year: '', isbn: clean, cover: '' });
+      setBookError('Lookup failed \u2014 check your connection, or enter details yourself.');
+    } finally { setBookBusy(false); }
+  }
+
+  async function searchByTitle(q) {
+    const query = (q || '').trim();
+    if (!query) return;
+    setBookBusy(true); setBookError(null);
+    try {
+      const res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(query)}&limit=12`);
+      const data = await res.json();
+      setBookSearchResults((data.docs || []).map((d) => ({
+        title: d.title || '',
+        author: (d.author_name || []).join(', '),
+        year: d.first_publish_year ? String(d.first_publish_year) : '',
+        isbn: (d.isbn || [])[0] || '',
+        cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : '',
+      })));
+    } catch (e) { setBookError('Search failed \u2014 check your connection.'); }
+    finally { setBookBusy(false); }
+  }
+  function pickSearchResult(r) {
+    setBookDraft({ title: r.title, author: r.author, year: r.year, isbn: r.isbn, cover: r.cover });
+    setBookStep('confirm');
+  }
+  function startManualEntry() {
+    setBookDraft({ title: '', author: '', year: '', isbn: '', cover: '' });
+    setBookStep('confirm');
+  }
+
+  async function handleBookOwnPhoto(e) {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    try { const dataUrl = await compressImage(file); setBookOwnPhoto(dataUrl); } catch (_) {}
+  }
+
+  async function saveBook() {
+    if (!bookDraft || !bookDraft.title.trim()) { setBookError('A title is needed.'); return; }
+    if (!bookBox.trim()) { setBookError('Which box is it stored in?'); return; }
+    setBookBusy(true); setBookError(null);
+    const photos = [];
+    if (bookDraft.cover) photos.push(bookDraft.cover);
+    if (bookOwnPhoto) photos.push(bookOwnPhoto);
+    try {
+      const res = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'book', name: bookDraft.title.trim(), category: bookDraft.year || '', box: bookBox.trim(), photos }),
+      });
+      const data = await res.json();
+      if (data.item && data.item.id) {
+        await fetch(`/api/items/${data.item.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ author: (bookDraft.author || '').trim(), isbn: bookDraft.isbn || '' }),
+        });
+      }
+      setNotice(`"${bookDraft.title.trim()}" added to your library.`);
+      closeAddBook();
+      await loadItems();
+    } catch (e) { setBookError('Save failed \u2014 try again.'); }
+    finally { setBookBusy(false); }
+  }
+
   function reorderTabs(draggedId, targetId) {
     const ids = files.map((f) => String(f.id));
     const from = ids.indexOf(String(draggedId));
@@ -808,7 +961,7 @@ export default function Home() {
         </header>
 
         <nav style={{ display: 'flex', background: colors.bg, borderBottom: `1px solid ${colors.line}` }}>
-          {['log', 'inventory', 'fileit', 'find'].map((t) => (
+          {['log', 'inventory', 'library', 'fileit', 'find'].map((t) => (
             <button
               key={t}
               onClick={() => { setTab(t); setError(null); if (t === 'inventory') setEmptyMsg(EMPTY_MESSAGES[Math.floor(Math.random() * EMPTY_MESSAGES.length)]); }}
@@ -816,12 +969,12 @@ export default function Home() {
                 flex: 1, background: 'transparent', border: 'none',
                 borderBottom: `3px solid ${tab === t ? colors.brand : 'transparent'}`,
                 color: tab === t ? colors.ink : colors.inkFaint,
-                fontWeight: 600, fontSize: 12.5, letterSpacing: '0.08em',
-                padding: '15px 6px 12px', cursor: 'pointer',
+                fontWeight: 600, fontSize: 11.5, letterSpacing: '0.05em',
+                padding: '15px 4px 12px', cursor: 'pointer',
                 transition: 'color 0.15s ease',
               }}
             >
-              {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'SILO' : t === 'fileit' ? 'FILE-IT' : 'FIND IT'}
+              {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'SILO' : t === 'library' ? 'LIBRARY' : t === 'fileit' ? 'FILE-IT' : 'FIND IT'}
             </button>
           ))}
         </nav>
@@ -1037,6 +1190,58 @@ export default function Home() {
             </div>
           </div>
         )}
+        {loaded && tab === 'library' && (() => {
+          const q = librarySearch.trim().toLowerCase();
+          const shown = q
+            ? books.filter((b) => (b.name || '').toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q) || (b.box || '').toLowerCase().includes(q))
+            : books;
+          return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 700 }}>Library ({books.length})</h2>
+                <button className="act" type="button" onClick={openAddBook} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '10px 16px', fontSize: 13.5 }}>+ Add a book</button>
+              </div>
+              <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>Your books, boxed away but easy to find. Each one remembers which box it&rsquo;s in.</p>
+
+              {books.length > 0 && (
+                <input
+                  type="text"
+                  placeholder="Search title, author or box..."
+                  value={librarySearch}
+                  onChange={(e) => setLibrarySearch(e.target.value)}
+                  style={{ ...inputStyle, marginBottom: 16 }}
+                />
+              )}
+
+              {books.length === 0 ? (
+                <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '30px 20px', fontSize: 13.5, lineHeight: 1.5 }}>
+                  No books yet. Tap <strong>+ Add a book</strong> and scan a barcode to get started.
+                </p>
+              ) : shown.length === 0 ? (
+                <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '30px 0', fontSize: 13.5 }}>Nothing matches that.</p>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 14 }}>
+                  {shown.map((b) => (
+                    <div
+                      key={b.id}
+                      onClick={() => { setOpenItem(b); setNotice(null); }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {b.photos && b.photos[0] ? (
+                        <img src={b.photos[0]} alt="" style={{ width: '100%', aspectRatio: '2 / 3', objectFit: 'cover', borderRadius: 8, background: colors.bgAlt, display: 'block', boxShadow: '0 1px 4px rgba(23,26,32,0.12)' }} />
+                      ) : (
+                        <div style={{ width: '100%', aspectRatio: '2 / 3', background: colors.bgAlt, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 8, fontSize: 12, fontWeight: 600, color: colors.inkFaint }}>{limitWords(b.name || 'Book', 6)}</div>
+                      )}
+                      <div style={{ fontWeight: 600, fontSize: 12.5, marginTop: 6, lineHeight: 1.25 }}>{limitWords(b.name || 'Untitled', 6)}</div>
+                      <div style={{ fontSize: 11, color: colors.inkFaint, fontWeight: 600, marginTop: 2 }}>BOX: {b.box || '\u2014'}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {loaded && tab === 'fileit' && (() => {
           const validFolder = files.find((f) => String(f.id) === String(selectedFileId));
           const showingSilo = selectedFileId === 'unfiled' || !validFolder;
@@ -1271,6 +1476,112 @@ export default function Home() {
         )}
       </main>
 
+      {addingBook && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 130 }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: 560, maxHeight: '92vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', padding: 0 }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Add a book</span>
+              <button type="button" onClick={closeAddBook} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+
+            <div style={{ padding: 20 }}>
+              {bookError && <p style={{ color: colors.accent, fontSize: 13, marginBottom: 12 }}>{bookError}</p>}
+
+              {bookStep === 'scan' && (
+                <div>
+                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 12 }}>Point the camera at the barcode on the back of the book.</p>
+                  <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
+                    <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div style={{ position: 'absolute', inset: '28% 12%', border: `2px solid rgba(124,203,43,0.9)`, borderRadius: 8 }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button type="button" onClick={() => { stopScan(); setBookStep('search'); }} style={{ ...outlineBtn, flex: 1 }}>Search by title</button>
+                    <button type="button" onClick={() => { stopScan(); setBookIsbnInput(''); setBookStep('isbn'); }} style={{ ...outlineBtn, flex: 1 }}>Type ISBN</button>
+                  </div>
+                </div>
+              )}
+
+              {bookStep === 'isbn' && (
+                <div>
+                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 10 }}>Type or paste the ISBN (the number under the barcode).</p>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    <input type="text" inputMode="numeric" autoFocus placeholder="e.g. 9780143127796" value={bookIsbnInput} onChange={(e) => setBookIsbnInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') lookupIsbn(bookIsbnInput); }} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+                    <button type="button" onClick={() => lookupIsbn(bookIsbnInput)} disabled={!bookIsbnInput.trim() || bookBusy} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: (bookIsbnInput.trim() && !bookBusy) ? 1 : 0.5 }}>{bookBusy ? '...' : 'Find'}</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 14 }}>
+                    <button type="button" onClick={() => setBookStep('search')} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>Search by title instead</button>
+                    <button type="button" onClick={startManualEntry} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>Enter it manually</button>
+                  </div>
+                </div>
+              )}
+
+              {bookStep === 'search' && (
+                <div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                    <input type="text" autoFocus placeholder="Book title..." value={bookSearchQuery} onChange={(e) => setBookSearchQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') searchByTitle(bookSearchQuery); }} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+                    <button type="button" onClick={() => searchByTitle(bookSearchQuery)} disabled={!bookSearchQuery.trim() || bookBusy} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: (bookSearchQuery.trim() && !bookBusy) ? 1 : 0.5 }}>{bookBusy ? '...' : 'Search'}</button>
+                  </div>
+                  {bookSearchResults.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                      {bookSearchResults.map((r, i) => (
+                        <button key={i} type="button" onClick={() => pickSearchResult(r)} style={{ display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', padding: 8, border: `1px solid ${colors.line}`, borderRadius: 10, background: '#fff', cursor: 'pointer' }}>
+                          {r.cover ? <img src={r.cover} alt="" style={{ width: 40, height: 58, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: colors.bgAlt }} /> : <div style={{ width: 40, height: 58, background: colors.bgAlt, borderRadius: 4, flexShrink: 0 }} />}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13.5, color: colors.ink }}>{r.title}</div>
+                            <div style={{ fontSize: 12, color: colors.inkFaint }}>{r.author}{r.year ? ` \u00b7 ${r.year}` : ''}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button type="button" onClick={startManualEntry} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>Can&rsquo;t find it? Enter it manually</button>
+                </div>
+              )}
+
+              {bookStep === 'confirm' && bookDraft && (
+                <div>
+                  {bookBusy && !bookDraft.title ? (
+                    <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '20px 0' }}>Looking it up...</p>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: 14, marginBottom: 16 }}>
+                        {bookDraft.cover ? <img src={bookDraft.cover} alt="" style={{ width: 88, height: 128, objectFit: 'cover', borderRadius: 8, flexShrink: 0, background: colors.bgAlt, boxShadow: '0 1px 4px rgba(23,26,32,0.15)' }} /> : <div style={{ width: 88, height: 128, background: colors.bgAlt, borderRadius: 8, flexShrink: 0 }} />}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>TITLE</label>
+                          <input type="text" value={bookDraft.title} onChange={(e) => setBookDraft({ ...bookDraft, title: e.target.value })} style={{ ...inputStyle, marginBottom: 8, marginTop: 4 }} />
+                          <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>AUTHOR</label>
+                          <input type="text" value={bookDraft.author} onChange={(e) => setBookDraft({ ...bookDraft, author: e.target.value })} style={{ ...inputStyle, marginBottom: 0, marginTop: 4 }} />
+                        </div>
+                      </div>
+
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>WHICH BOX IS IT IN?</label>
+                        <input type="text" list="boxlist" placeholder="e.g. Books Box 3" value={bookBox} onChange={(e) => setBookBox(e.target.value)} style={{ ...inputStyle, marginBottom: 0, marginTop: 4 }} />
+                        <datalist id="boxlist">{recentBoxes.map((b) => <option key={b} value={b} />)}</datalist>
+                      </div>
+
+                      <div style={{ marginBottom: 16 }}>
+                        <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>YOUR OWN PHOTO (optional \u2014 for special covers)</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
+                          {bookOwnPhoto && <img src={bookOwnPhoto} alt="" style={{ width: 44, height: 62, objectFit: 'cover', borderRadius: 6 }} />}
+                          <label style={{ ...outlineBtn, width: 'auto', padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'inline-block' }}>
+                            {bookOwnPhoto ? 'Retake' : 'Add a photo'}
+                            <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleBookOwnPhoto} />
+                          </label>
+                          {bookOwnPhoto && <button type="button" onClick={() => setBookOwnPhoto(null)} style={{ background: 'none', border: 'none', color: colors.accent, fontSize: 12.5, cursor: 'pointer' }}>Remove</button>}
+                        </div>
+                      </div>
+
+                      <button className="act" type="button" onClick={saveBook} disabled={bookBusy} style={{ ...primaryBtn, width: '100%', opacity: bookBusy ? 0.6 : 1 }}>{bookBusy ? 'Saving...' : 'Add to library'}</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {movingItem && (
         <div
           onClick={() => setMovingItem(null)}
@@ -1411,10 +1722,23 @@ export default function Home() {
               })()}
 
               <h3 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px' }}>{openItem.name || 'Unidentified item'}</h3>
-              <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 16 }}>
-                Box: {openItem.box} &middot; {openItem.category || 'uncategorised'}
-              </p>
+              {openItem.type === 'book' ? (
+                <div style={{ marginBottom: 16 }}>
+                  <p style={{ color: colors.inkSoft, fontSize: 14, margin: '0 0 8px' }}>
+                    {openItem.author ? `by ${openItem.author}` : 'Unknown author'}{openItem.category ? ` \u00b7 ${openItem.category}` : ''}
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: colors.ink, background: colors.bgAlt, padding: '5px 10px', borderRadius: 999 }}>BOX: {openItem.box || '\u2014'}</span>
+                    {openItem.isbn && <span style={{ fontSize: 12, fontWeight: 600, color: colors.inkFaint, background: colors.bgAlt, padding: '5px 10px', borderRadius: 999 }}>ISBN {openItem.isbn}</span>}
+                  </div>
+                </div>
+              ) : (
+                <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 16 }}>
+                  Box: {openItem.box} &middot; {openItem.category || 'uncategorised'}
+                </p>
+              )}
 
+              {openItem.type !== 'book' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>FILE</span>
                 <select
@@ -1428,8 +1752,9 @@ export default function Home() {
                   ))}
                 </select>
               </div>
+              )}
 
-              {openItem.type !== 'box' && (
+              {openItem.type !== 'box' && openItem.type !== 'book' && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint, marginBottom: 8 }}>STATUS</div>
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -1456,7 +1781,7 @@ export default function Home() {
                 </div>
               )}
 
-              {openItem.estimate ? (
+              {openItem.type !== 'book' && (openItem.estimate ? (
                 <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
                   <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 4 }}>Estimated resale range</div>
                   <div style={{ fontSize: 26, fontWeight: 700, color: colors.success }}>
@@ -1545,7 +1870,7 @@ export default function Home() {
                     Skips the price research &#8212; just works out what it is and writes the ad.
                   </p>
                 </div>
-              )}
+              ))}
 
               {openItem.status === 'listed' && openItem.listing && (
                 <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
