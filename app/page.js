@@ -539,6 +539,17 @@ export default function Home() {
     }
   }
 
+  async function setItemStatus(item, status) {
+    const res = await fetch(`/api/items/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    const data = await res.json();
+    setOpenItem(data.item);
+    await loadItems();
+  }
+
   async function markSold(item) {
     const res = await fetch(`/api/items/${item.id}`, {
       method: 'PATCH',
@@ -1095,6 +1106,15 @@ export default function Home() {
                           onClick={() => { if (!dragItemId) setPickedItemId((p) => (String(p) === String(item.id) ? null : item.id)); }}
                           style={{ background: '#fff', border: `${picked ? 2 : 1}px solid ${picked ? colors.ink : colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: picked ? '0 0 0 3px rgba(23,26,32,0.10)' : '0 1px 3px rgba(23,26,32,0.04)', opacity: dragItemId === item.id ? 0.4 : 1 }}
                         >
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setPickedItemId(null); setOpenItem(item); setNotice(null); }}
+                            title="Open details"
+                            aria-label="Open details"
+                            style={{ position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: '50%', border: `1px solid ${colors.line}`, background: '#fff', color: colors.inkSoft, fontSize: 15, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}
+                          >
+                            &#8942;
+                          </button>
                           {item.photos?.[0] ? (
                             <img src={item.photos[0]} alt="" draggable={false} style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
                           ) : (
@@ -1277,6 +1297,33 @@ export default function Home() {
                   ))}
                 </select>
               </div>
+
+              {openItem.type !== 'box' && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint, marginBottom: 8 }}>STATUS</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {['logged', 'listed', 'sold'].map((s) => {
+                      const on = (openItem.status || 'logged') === s;
+                      const c = statusColors[s] || statusColors.logged;
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setItemStatus(openItem, s)}
+                          style={{
+                            flex: 1, padding: '9px 6px', borderRadius: 999, fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', cursor: 'pointer',
+                            border: on ? `2px solid ${colors.ink}` : `1.5px solid ${colors.line}`,
+                            background: on ? c.bg : '#fff',
+                            color: on ? c.text : colors.inkFaint,
+                          }}
+                        >
+                          {s.toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {openItem.estimate ? (
                 <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
