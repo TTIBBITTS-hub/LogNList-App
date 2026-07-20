@@ -751,7 +751,13 @@ export default function Home() {
   };
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', paddingBottom: 80, background: colors.bg, minHeight: '100vh' }}>
+    <div
+      onClickCapture={(e) => {
+        const b = e.target.closest && e.target.closest('.act');
+        if (b && !b.disabled) { b.classList.add('busy'); setTimeout(() => b.classList.remove('busy'), 350); }
+      }}
+      style={{ maxWidth: 640, margin: '0 auto', paddingBottom: 80, background: colors.bg, minHeight: '100vh' }}
+    >
       <style>{`
         @keyframes mic-pulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(227,25,55,0.35); }
@@ -769,7 +775,15 @@ export default function Home() {
           transform: scale(0.98);
         }
         .act:active:not(:disabled) * { color: #171A20 !important; }
-        .act { transition: background 0.08s ease, border-color 0.08s ease, transform 0.08s ease; }
+        .act { transition: background 0.22s ease, border-color 0.22s ease, transform 0.1s ease; }
+
+        /* Held green pulse: added on click, removed after a beat, so a quick tap still shows clearly. */
+        .act.busy:not(:disabled) {
+          background: #7CCB2B !important;
+          border-color: #7CCB2B !important;
+          color: #171A20 !important;
+        }
+        .act.busy:not(:disabled) * { color: #171A20 !important; }
 
         @keyframes rain-in { from { opacity: 0; } to { opacity: 1; } }
 
