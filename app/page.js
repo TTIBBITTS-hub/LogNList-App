@@ -15,6 +15,7 @@ const colors = {
   success: '#0F7A54',
   successBg: '#E9F6F0',
   accent: '#E31937',
+  brand: '#7CCB2B',
 };
 
 const EMPTY_MESSAGES = [
@@ -792,10 +793,10 @@ export default function Home() {
               onClick={() => { setTab(t); setError(null); if (t === 'inventory') setEmptyMsg(EMPTY_MESSAGES[Math.floor(Math.random() * EMPTY_MESSAGES.length)]); }}
               style={{
                 flex: 1, background: 'transparent', border: 'none',
-                borderBottom: `2px solid ${tab === t ? colors.ink : 'transparent'}`,
+                borderBottom: `3px solid ${tab === t ? colors.brand : 'transparent'}`,
                 color: tab === t ? colors.ink : colors.inkFaint,
                 fontWeight: 600, fontSize: 12.5, letterSpacing: '0.08em',
-                padding: '15px 6px 13px', cursor: 'pointer',
+                padding: '15px 6px 12px', cursor: 'pointer',
                 transition: 'color 0.15s ease',
               }}
             >
