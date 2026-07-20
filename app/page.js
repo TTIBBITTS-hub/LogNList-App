@@ -147,6 +147,7 @@ export default function Home() {
   };
   const files = items.filter((i) => i.type === 'file').sort((a, b) => filePos(a) - filePos(b));
   const realItems = items.filter((i) => i.type !== 'file');
+  const unfiledItems = realItems.filter((i) => !i.file_id);
   const itemsInFile = (fileId) =>
     realItems.filter((i) => String(i.file_id || '') === String(fileId));
 
@@ -903,10 +904,10 @@ export default function Home() {
 
         {loaded && tab === 'inventory' && (
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>LogNList ({realItems.length})</h2>
-            {realItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 30 }}>Nothing logged yet.</p>}
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>LogNList ({unfiledItems.length})</h2>
+            {unfiledItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 30 }}>Nothing logged yet.</p>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
-              {realItems.map((item) => {
+              {unfiledItems.map((item) => {
                 const isBox = item.type === 'box';
                 const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
                 return (
@@ -959,7 +960,6 @@ export default function Home() {
         )}
         {loaded && tab === 'fileit' && (() => {
           const selectedFile = files.find((f) => String(f.id) === String(selectedFileId));
-          const unfiledItems = realItems.filter((i) => !i.file_id);
           const shownItems = selectedFileId === 'unfiled' ? unfiledItems : itemsInFile(selectedFileId);
           const picking = !!pickedItemId;
           const tabPill = (id, label, count, fileObj) => {
