@@ -17,6 +17,19 @@ const colors = {
   accent: '#E31937',
 };
 
+const EMPTY_MESSAGES = [
+  'Suspiciously empty. Somewhere, a drawer of mystery cables awaits. \uD83D\uDCE6',
+  'Blank slate. Every good collection starts with one thing logged.',
+  'Nothing here yet \u2014 go give some clutter a home.',
+  'All quiet. Log something and watch it show up.',
+  'Empty box energy. Time to fill it up.',
+  'Your future self, hunting for that one thing, will thank you.',
+  'A clean slate. Rare and beautiful. Let\u2019s ruin it. \uD83D\uDE04',
+  'Nothing logged. The garage isn\u2019t going to sort itself.',
+  'Peaceful in here, isn\u2019t it? Log your first thing to get started.',
+  'This space is a void. Add something to give it purpose.',
+];
+
 function compressImage(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -91,6 +104,7 @@ async function copyToClipboard(text) {
 
 export default function Home() {
   const [tab, setTab] = useState('log');
+  const [emptyMsg, setEmptyMsg] = useState(() => EMPTY_MESSAGES[Math.floor(Math.random() * EMPTY_MESSAGES.length)]);
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
@@ -752,7 +766,7 @@ export default function Home() {
           {['log', 'inventory', 'fileit', 'find'].map((t) => (
             <button
               key={t}
-              onClick={() => { setTab(t); setError(null); }}
+              onClick={() => { setTab(t); setError(null); if (t === 'inventory') setEmptyMsg(EMPTY_MESSAGES[Math.floor(Math.random() * EMPTY_MESSAGES.length)]); }}
               style={{
                 flex: 1, background: 'transparent', border: 'none',
                 borderBottom: `2px solid ${tab === t ? colors.ink : 'transparent'}`,
@@ -916,7 +930,7 @@ export default function Home() {
         {loaded && tab === 'inventory' && (
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>LogNList ({unfiledItems.length})</h2>
-            {unfiledItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 30 }}>Nothing logged yet.</p>}
+            {unfiledItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40, fontSize: 15, lineHeight: 1.5, padding: '0 20px' }}>{emptyMsg}</p>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
               {unfiledItems.map((item) => {
                 const isBox = item.type === 'box';
