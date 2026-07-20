@@ -140,7 +140,12 @@ export default function Home() {
 
   // Search matches name, category, box and notes — same fields as the artifact.
   // A "file" is just a row with type 'file'. Real items are everything else.
-  const files = items.filter((i) => i.type === 'file');
+  // Tab order is stored as a number in each file's (otherwise unused) category field.
+  const filePos = (f) => {
+    const n = Number(f.category);
+    return (f.category !== '' && f.category != null && !isNaN(n)) ? n : 1e9;
+  };
+  const files = items.filter((i) => i.type === 'file').sort((a, b) => filePos(a) - filePos(b));
   const realItems = items.filter((i) => i.type !== 'file');
   const itemsInFile = (fileId) =>
     realItems.filter((i) => String(i.file_id || '') === String(fileId));
@@ -181,6 +186,8 @@ export default function Home() {
   const [dragItemId, setDragItemId] = useState(null);
   const [dragOverFile, setDragOverFile] = useState(null);
   const [pickedItemId, setPickedItemId] = useState(null);
+  const [dragTabId, setDragTabId] = useState(null);
+  const [dragOverTab, setDragOverTab] = useState(null);
 
   useEffect(() => {
     loadItems();
@@ -575,7 +582,7 @@ export default function Home() {
     const res = await fetch('/api/items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'file', name: nm }),
+      body: JSON.stringify({ type: 'file', name: nm, category: String(files.length) }),
     });
     const data = await res.json();
     setNewFileName('');
@@ -632,6 +639,47 @@ export default function Home() {
     } catch (e) {
       await loadItems(); // put it back if the save failed
     }
+  }
+
+  // Persist a new tab order by writing each file's position into its category field.
+  async function reorderFiles(orderedIds) {
+    setItems((prev) => prev.map((i) => {
+      if (i.type !== 'file') return i;
+      const pos = orderedIds.findIndex((x) => String(x) === String(i.id));
+      return pos >= 0 ? { ...i, category: String(pos) } : i;
+    }));
+    try {
+      await Promise.all(orderedIds.map((id, idx) =>
+        fetch(`/api/items/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category: String(idx) }),
+        })
+      ));
+    } catch (e) {
+      await loadItems();
+    }
+  }
+
+  function reorderTabs(draggedId, targetId) {
+    const ids = files.map((f) => String(f.id));
+    const from = ids.indexOf(String(draggedId));
+    const to = ids.indexOf(String(targetId));
+    if (from === -1 || to === -1 || from === to) return;
+    const next = [...ids];
+    next.splice(from, 1);
+    next.splice(to, 0, String(draggedId));
+    reorderFiles(next);
+  }
+
+  function nudgeFile(file, dir) {
+    const ids = files.map((f) => String(f.id));
+    const i = ids.indexOf(String(file.id));
+    const j = i + dir;
+    if (i === -1 || j < 0 || j >= ids.length) return;
+    const next = [...ids];
+    [next[i], next[j]] = [next[j], next[i]];
+    reorderFiles(next);
   }
 
   async function assignFile(item, fileId) {
@@ -914,23 +962,31 @@ export default function Home() {
           const unfiledItems = realItems.filter((i) => !i.file_id);
           const shownItems = selectedFileId === 'unfiled' ? unfiledItems : itemsInFile(selectedFileId);
           const picking = !!pickedItemId;
-          const tabPill = (id, label, count) => {
+          const tabPill = (id, label, count, fileObj) => {
             const active = String(selectedFileId) === String(id);
-            const over = (dragOverFile === id) || picking;
+            const itemOver = ((dragOverFile === id) || picking) && !dragTabId;
+            const tabOver = dragTabId && dragOverTab === id && String(dragTabId) !== String(id);
             return (
               <button
                 key={id}
                 type="button"
+                draggable={!!fileObj}
                 onClick={() => { if (pickedItemId) { moveItemToFile(pickedItemId, id); setPickedItemId(null); } else { setSelectedFileId(id); setEditingName(false); setNotice(null); } }}
-                onDragOver={(e) => { e.preventDefault(); if (dragOverFile !== id) setDragOverFile(id); }}
-                onDragLeave={() => setDragOverFile((p) => (p === id ? null : p))}
-                onDrop={(e) => { e.preventDefault(); moveItemToFile(dragItemId, id); setDragOverFile(null); setDragItemId(null); }}
+                onDragStart={fileObj ? (e) => { setDragTabId(fileObj.id); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', 'tab:' + fileObj.id); } catch (_) {} } : undefined}
+                onDragEnd={fileObj ? () => { setDragTabId(null); setDragOverTab(null); } : undefined}
+                onDragOver={(e) => { e.preventDefault(); if (dragTabId) { if (dragOverTab !== id) setDragOverTab(id); } else if (dragOverFile !== id) setDragOverFile(id); }}
+                onDragLeave={() => { if (dragTabId) setDragOverTab((p) => (p === id ? null : p)); else setDragOverFile((p) => (p === id ? null : p)); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragTabId) { if (fileObj) reorderTabs(dragTabId, fileObj.id); setDragTabId(null); setDragOverTab(null); }
+                  else { moveItemToFile(dragItemId, id); setDragOverFile(null); setDragItemId(null); }
+                }}
                 style={{
-                  flex: '0 0 auto', whiteSpace: 'nowrap', cursor: 'pointer',
+                  flex: '0 0 auto', whiteSpace: 'nowrap', cursor: fileObj ? 'grab' : 'pointer',
                   padding: '9px 15px', borderRadius: 999, fontSize: 13, fontWeight: 600,
-                  border: over ? `2px dashed ${colors.success}` : `1.5px solid ${active ? colors.ink : colors.line}`,
-                  background: over ? colors.successBg : (active ? colors.ink : '#fff'),
-                  color: over ? colors.success : (active ? '#fff' : colors.inkSoft),
+                  border: tabOver ? `2px solid ${colors.ink}` : (itemOver ? `2px dashed ${colors.success}` : `1.5px solid ${active ? colors.ink : colors.line}`),
+                  background: itemOver ? colors.successBg : (active ? colors.ink : '#fff'),
+                  color: itemOver ? colors.success : (active ? '#fff' : colors.inkSoft),
                   transition: 'background 0.12s ease, color 0.12s ease',
                 }}
               >
@@ -942,12 +998,12 @@ export default function Home() {
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>File-it</h2>
               <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>
-                Tap an item to pick it up, then tap a tab to file it. (On a computer you can drag instead.)
+                Tap an item to pick it up, then tap a tab to file it. Drag tabs to reorder them (or use the arrows on a selected tab).
               </p>
 
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
-                {tabPill('unfiled', 'Unfiled', unfiledItems.length)}
-                {files.map((f) => tabPill(f.id, f.name || 'Untitled', itemsInFile(f.id).length))}
+                {tabPill('unfiled', 'Silo', unfiledItems.length)}
+                {files.map((f) => tabPill(f.id, f.name || 'Untitled', itemsInFile(f.id).length, f))}
                 <button
                   type="button"
                   onClick={() => { setShowNewFile(true); setNewFileName(''); }}
@@ -999,9 +1055,19 @@ export default function Home() {
                       <button type="button" onClick={() => setEditingName(false)} style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 16px' }}>Cancel</button>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                      {(() => {
+                        const pos = files.findIndex((f) => String(f.id) === String(selectedFile.id));
+                        const arrow = (label, dir, disabled) => (
+                          <button type="button" disabled={disabled} onClick={() => nudgeFile(selectedFile, dir)} style={{ background: 'none', border: 'none', color: disabled ? colors.line : colors.inkSoft, fontSize: 12.5, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', padding: '2px 0' }}>{label}</button>
+                        );
+                        return (<>
+                          {arrow('\u25C0 Move left', -1, pos <= 0)}
+                          {arrow('Move right \u25B6', 1, pos < 0 || pos >= files.length - 1)}
+                        </>);
+                      })()}
                       <button type="button" onClick={() => { setEditingName(true); setRenameValue(selectedFile.name || ''); }} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Rename tab</button>
-                      <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" tab? The items in it are kept, just moved back to Unfiled.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: 'none', color: colors.accent, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Delete tab</button>
+                      <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" tab? The items in it are kept, just moved back to Silo.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: 'none', color: colors.accent, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Delete tab</button>
                     </div>
                   )}
                 </div>
@@ -1012,7 +1078,7 @@ export default function Home() {
                   <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '30px 0', fontSize: 13.5 }}>
                     {selectedFileId === 'unfiled'
                       ? 'Nothing loose here \u2014 every item is filed.'
-                      : `Nothing in this tab yet. Open the Unfiled tab, then drag items up onto "${selectedFile?.name}".`}
+                      : `Nothing in this tab yet. Open the Silo tab, then drag items up onto "${selectedFile?.name}".`}
                   </p>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
