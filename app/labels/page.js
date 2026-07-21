@@ -176,13 +176,13 @@ export default function LabelsPage() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') addBox(); }}
-              placeholder="Name it - e.g. Garage Shelf 2"
-              style={{ flex: 1, padding: 12, border: '1.5px solid ' + colors.line, borderRadius: 10, background: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+              placeholder="Name the box"
+              style={{ flex: 1, minWidth: 0, padding: 12, border: '1.5px solid ' + colors.line, borderRadius: 10, background: '#fff', fontSize: 14, boxSizing: 'border-box' }}
             />
             <button
               onClick={addBox}
               disabled={!newName.trim() || adding}
-              style={{ flex: '0 0 auto', padding: '0 20px', background: colors.ink, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: newName.trim() && !adding ? 1 : 0.5 }}
+              style={{ flex: '0 0 auto', padding: '12px 16px', whiteSpace: 'nowrap', background: colors.ink, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: newName.trim() && !adding ? 1 : 0.5 }}
             >
               {adding ? 'Adding...' : 'Add box'}
             </button>
