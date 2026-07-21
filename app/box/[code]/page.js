@@ -118,9 +118,10 @@ export default function BoxPage() {
                   const sc = statusColors[item.status] || statusColors.logged;
                   const isBook = item.type === 'book';
                   return (
-                    <div
+                    <a
                       key={item.id}
-                      style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
+                      href={'/?item=' + item.id}
+                      style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, boxShadow: '0 1px 3px rgba(23,26,32,0.04)', textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                     >
                       {item.photos && item.photos[0] ? (
                         <img src={item.photos[0]} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 10, flexShrink: 0, background: colors.bgAlt }} />
@@ -149,7 +150,7 @@ export default function BoxPage() {
                           </span>
                         )}
                       </div>
-                    </div>
+                    </a>
                   );
                 })}
               </div>
