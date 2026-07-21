@@ -1058,37 +1058,36 @@ export default function Home() {
           <div style={{ color: 'rgba(255,255,255,0.62)', fontSize: 13, letterSpacing: '0.01em', fontWeight: 400, textAlign: 'right' }}>Log it. List it. Find it again.</div>
         </header>
 
-        <nav style={{ display: 'flex', background: colors.bg, borderBottom: `1px solid ${colors.line}` }}>
-          {['log', 'inventory', 'library', 'fileit', 'find'].map((t) => (
-            <button
-              key={t}
-              onClick={() => { setTab(t); setError(null); if (t === 'inventory') setEmptyMsg(EMPTY_MESSAGES[Math.floor(Math.random() * EMPTY_MESSAGES.length)]); }}
-              style={{
-                flex: 1, background: 'transparent', border: 'none',
-                borderBottom: `3px solid ${tab === t ? colors.brand : 'transparent'}`,
-                color: tab === t ? colors.ink : colors.inkFaint,
-                fontWeight: 600, fontSize: 11.5, letterSpacing: '0.05em',
-                padding: '15px 4px 12px', cursor: 'pointer',
-                transition: 'color 0.15s ease',
-              }}
-            >
-              {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'SILO' : t === 'library' ? 'LIBRARY' : t === 'fileit' ? 'FILE-IT' : 'FIND IT'}
-            </button>
-          ))}
-          <button
-            key="labels"
-            onClick={() => { window.location.href = '/labels'; }}
-            style={{
-              flex: 1, background: 'transparent', border: 'none',
-              borderBottom: '3px solid transparent',
-              color: colors.inkFaint,
-              fontWeight: 600, fontSize: 11.5, letterSpacing: '0.05em',
-              padding: '15px 4px 12px', cursor: 'pointer',
-              transition: 'color 0.15s ease',
-            }}
-          >
-            LABELS
-          </button>
+        <nav style={{ display: 'flex', gap: 4, background: colors.bg, borderBottom: `1px solid ${colors.line}`, padding: '10px 8px 12px' }}>
+          {[
+            { key: 'log', label: 'Log it' },
+            { key: 'inventory', label: 'Silo' },
+            { key: 'library', label: 'Library' },
+            { key: 'fileit', label: 'File-it' },
+            { key: 'find', label: 'Find it' },
+            { key: 'labels', label: 'Labels', nav: '/labels' },
+          ].map((tItem) => {
+            const t = tItem.key;
+            const active = tItem.nav ? false : tab === t;
+            return (
+              <button
+                key={t}
+                onClick={() => {
+                  if (tItem.nav) { window.location.href = tItem.nav; return; }
+                  setTab(t); setError(null);
+                  if (t === 'inventory') setEmptyMsg(EMPTY_MESSAGES[Math.floor(Math.random() * EMPTY_MESSAGES.length)]);
+                }}
+                style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}
+              >
+                <span style={{ width: 44, height: 44, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? colors.ink : colors.bgAlt, color: active ? '#fff' : colors.inkSoft, transition: 'background 0.15s ease, color 0.15s ease' }}>
+                  {tabIcon(t)}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.01em', color: active ? colors.ink : colors.inkFaint }}>
+                  {tItem.label}
+                </span>
+              </button>
+            );
+          })}
         </nav>
       </div>
 
@@ -2075,6 +2074,26 @@ export default function Home() {
 
 // The LogNList mark — phone outline, cardboard carton, two ticked rows.
 // Inline SVG: vector, crisp at any size, no background dependency.
+function tabIcon(key) {
+  const p = { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  if (key === 'log') {
+    return (<svg {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>);
+  }
+  if (key === 'inventory') {
+    return (<svg {...p}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>);
+  }
+  if (key === 'library') {
+    return (<svg {...p}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>);
+  }
+  if (key === 'fileit') {
+    return (<svg {...p}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" /></svg>);
+  }
+  if (key === 'find') {
+    return (<svg {...p}><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>);
+  }
+  return (<svg {...p}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3M14 17v3M17 17h3v3M20 14v.01" /></svg>);
+}
+
 function BoxMark({ size = 72 }) {
   // viewBox is 378x628, so lock the width to that ratio.
   // NB: width="auto" on an <svg> resolves to 100%, not intrinsic — it hijacks the row.
