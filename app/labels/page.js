@@ -16,15 +16,18 @@ const colors = {
   brand: '#7CCB2B',
 };
 
-// Load the QR library from a CDN at runtime (same approach the app uses for the barcode scanner).
+// Load a small, reliable QR library from a CDN at runtime.
 function loadQR() {
   return new Promise((resolve, reject) => {
-    if (typeof window !== 'undefined' && window.QRCode && window.QRCode.toDataURL) {
-      return resolve(window.QRCode);
+    if (typeof window !== 'undefined' && typeof window.qrcode === 'function') {
+      return resolve(window.qrcode);
     }
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
-    s.onload = () => resolve(window.QRCode);
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+    s.onload = () =>
+      typeof window.qrcode === 'function'
+        ? resolve(window.qrcode)
+        : reject(new Error('QR library loaded but was empty'));
     s.onerror = () => reject(new Error('QR library failed to load'));
     document.head.appendChild(s);
   });
@@ -63,18 +66,21 @@ export default function LabelsPage() {
       (i) => i.type !== 'file' && i.type !== 'box' && (i.box || '').trim() === name
     ).length;
 
-  // Once items are loaded, build a QR data URL for each box.
+  // Once items are loaded, build a QR image for each box.
   useEffect(() => {
     if (!loaded || boxNames.length === 0) return;
     let cancelled = false;
     (async () => {
       try {
-        const QR = await loadQR();
+        const qrcode = await loadQR();
         const origin = window.location.origin;
         const map = {};
         for (const name of boxNames) {
           const url = origin + '/box/' + encodeURIComponent(name);
-          map[name] = await QR.toDataURL(url, { width: 320, margin: 1 });
+          const qr = qrcode(0, 'M');
+          qr.addData(url);
+          qr.make();
+          map[name] = qr.createDataURL(8, 16);
         }
         if (!cancelled) setQrMap(map);
       } catch (e) {
@@ -145,7 +151,7 @@ export default function LabelsPage() {
                     Log&amp;List
                   </div>
                   {qrMap[name] ? (
-                    <img src={qrMap[name]} alt="" style={{ width: 150, height: 150, display: 'block' }} />
+                    <img src={qrMap[name]} alt="" style={{ width: 150, height: 150, display: 'block', imageRendering: 'pixelated' }} />
                   ) : (
                     <div style={{ width: 150, height: 150, background: colors.bgAlt, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.inkFaint, fontSize: 12 }}>
                       ...
