@@ -1,8 +1,9 @@
 'use client';
 
 // Log&List - printable QR box labels.
-// Reads /api/items, finds every box you've used, and makes a scannable QR label
-// for each one pointing at /box/<name>. Print, cut, stick on the box.
+// Shows a label for every box you've created OR used, and lets you create a new
+// named box on the spot (saved to the boxes table) so you can print its QR before
+// anything goes in it. Each QR points at /box/<name>.
 
 import { useState, useEffect } from 'react';
 
@@ -14,6 +15,7 @@ const colors = {
   bgAlt: '#F4F4F5',
   line: '#E7E7E8',
   brand: '#7CCB2B',
+  accent: '#E31937',
 };
 
 // Load a small, reliable QR library from a CDN at runtime.
@@ -35,38 +37,76 @@ function loadQR() {
 
 export default function LabelsPage() {
   const [items, setItems] = useState([]);
+  const [boxes, setBoxes] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [qrMap, setQrMap] = useState({});
+  const [newName, setNewName] = useState('');
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     load();
   }, []);
 
   async function load() {
+    let itemList = [];
+    let boxList = [];
     try {
-      const res = await fetch('/api/items');
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setItems(data.items || []);
+      const ri = await fetch('/api/items');
+      const di = await ri.json();
+      if (di.error) throw new Error(di.error);
+      itemList = di.items || [];
     } catch (e) {
-      setError('Could not load your boxes: ' + e.message);
+      setError('Could not load your items: ' + e.message);
     }
+    // Boxes route is optional - if it's not there yet, we just carry on with item boxes.
+    try {
+      const rb = await fetch('/api/boxes');
+      const db = await rb.json();
+      if (db && db.boxes) boxList = db.boxes;
+    } catch (e) {}
+    setItems(itemList);
+    setBoxes(boxList);
     setLoaded(true);
   }
 
-  // Distinct box names, plus a count of the real items in each.
-  const usable = items.filter((i) => i.type !== 'file');
-  const boxNames = Array.from(
-    new Set(usable.map((i) => (i.box || '').trim()).filter(Boolean))
-  ).sort((a, b) => a.localeCompare(b));
+  async function addBox() {
+    const name = newName.trim();
+    if (!name) return;
+    setAdding(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/boxes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setNewName('');
+      await load();
+    } catch (e) {
+      setError('Could not add that box: ' + e.message);
+    }
+    setAdding(false);
+  }
+
+  // All box names: created boxes first, plus any names already used by items.
+  const createdNames = boxes.map((b) => (b.name || '').trim()).filter(Boolean);
+  const itemNames = items
+    .filter((i) => i.type !== 'file')
+    .map((i) => (i.box || '').trim())
+    .filter(Boolean);
+  const boxNames = Array.from(new Set([...createdNames, ...itemNames])).sort((a, b) =>
+    a.localeCompare(b)
+  );
 
   const countFor = (name) =>
     items.filter(
       (i) => i.type !== 'file' && i.type !== 'box' && (i.box || '').trim() === name
     ).length;
 
-  // Once items are loaded, build a QR image for each box.
+  // Build a QR image for each box name.
   useEffect(() => {
     if (!loaded || boxNames.length === 0) return;
     let cancelled = false;
@@ -112,26 +152,50 @@ export default function LabelsPage() {
         </div>
         <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, margin: 0 }}>Box labels</h1>
         <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 6 }}>
-          Print these, stick one on each box. Scan it later to see what's inside.
+          Create a box, print its code, stick it on. Scan it later to see what's inside.
         </div>
       </header>
 
       <main style={{ padding: 20 }}>
-        {!loaded && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40 }}>Loading...</p>}
-        {error && <p style={{ color: '#E31937', fontSize: 14, marginTop: 20 }}>{error}</p>}
+        {/* Create a new box */}
+        <div className="noprint" style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 22 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: colors.inkFaint, marginBottom: 8 }}>
+            CREATE A NEW BOX
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') addBox(); }}
+              placeholder="Name it - e.g. Garage Shelf 2"
+              style={{ flex: 1, padding: 12, border: '1.5px solid ' + colors.line, borderRadius: 10, background: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+            />
+            <button
+              onClick={addBox}
+              disabled={!newName.trim() || adding}
+              style={{ flex: '0 0 auto', padding: '0 20px', background: colors.ink, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: 'pointer', opacity: newName.trim() && !adding ? 1 : 0.5 }}
+            >
+              {adding ? 'Adding...' : 'Add box'}
+            </button>
+          </div>
+        </div>
 
-        {loaded && !error && boxNames.length === 0 && (
-          <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40, fontSize: 15, lineHeight: 1.5, padding: '0 20px' }}>
-            No boxes yet. Log an item into a box in the app, then come back and its label will be here.
+        {!loaded && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40 }}>Loading...</p>}
+        {error && <p style={{ color: colors.accent, fontSize: 14, marginTop: 4, marginBottom: 16 }}>{error}</p>}
+
+        {loaded && boxNames.length === 0 && (
+          <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 20, fontSize: 15, lineHeight: 1.5, padding: '0 20px' }}>
+            No boxes yet. Create one above and its printable QR will appear right here.
           </p>
         )}
 
-        {loaded && !error && boxNames.length > 0 && (
+        {loaded && boxNames.length > 0 && (
           <>
             <div className="noprint" style={{ marginBottom: 20 }}>
               <button
                 onClick={() => window.print()}
-                style={{ background: colors.ink, color: '#fff', border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 600, fontSize: 14.5, cursor: 'pointer' }}
+                style={{ background: colors.brand, color: colors.ink, border: 'none', borderRadius: 999, padding: '12px 22px', fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}
               >
                 Print labels
               </button>
