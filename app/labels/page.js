@@ -43,6 +43,7 @@ export default function LabelsPage() {
   const [qrMap, setQrMap] = useState({});
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
+  const [printOnly, setPrintOnly] = useState(null);
 
   useEffect(() => {
     load();
@@ -89,6 +90,11 @@ export default function LabelsPage() {
       setError('Could not add that box: ' + e.message);
     }
     setAdding(false);
+  }
+
+  function printLabel(name) {
+    setPrintOnly(name);
+    setTimeout(() => { window.print(); setPrintOnly(null); }, 60);
   }
 
   // All box names: created boxes first, plus any names already used by items.
@@ -142,6 +148,8 @@ export default function LabelsPage() {
             box-shadow: none !important;
             margin: 6px !important;
           }
+          .sheet.print-one .label { display: none !important; }
+          .sheet.print-one .label[data-print="yes"] { display: flex !important; }
           @page { margin: 12mm; }
         }
       `}</style>
@@ -204,11 +212,12 @@ export default function LabelsPage() {
               </span>
             </div>
 
-            <div className="sheet" style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+            <div className={"sheet" + (printOnly ? " print-one" : "")} style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
               {boxNames.map((name) => (
                 <div
                   key={name}
                   className="label"
+                  data-print={printOnly === name ? 'yes' : 'no'}
                   style={{ width: 230, border: '1px solid ' + colors.line, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: '0 1px 3px rgba(23,26,32,0.05)', background: '#fff' }}
                 >
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: colors.inkFaint, marginBottom: 10 }}>
@@ -227,6 +236,14 @@ export default function LabelsPage() {
                   <div style={{ fontSize: 12, color: colors.inkFaint, marginTop: 3 }}>
                     {countFor(name)} {countFor(name) === 1 ? 'item' : 'items'}
                   </div>
+                  <button
+                    type="button"
+                    className="noprint"
+                    onClick={() => printLabel(name)}
+                    style={{ marginTop: 12, background: 'transparent', border: '1.5px solid ' + colors.line, color: colors.ink, borderRadius: 999, padding: '7px 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Print this label
+                  </button>
                 </div>
               ))}
             </div>
