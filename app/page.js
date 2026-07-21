@@ -796,6 +796,74 @@ export default function Home() {
     scannerRef.current = null; scanLastRef.current = null; setScanActive(false);
   }
 
+  // ---- Scan a printed box QR to file the open item into that box ----
+  const boxVideoRef = useRef(null);
+  const boxScannerRef = useRef(null);
+  const [scanningBoxItem, setScanningBoxItem] = useState(null);
+  const [boxScanError, setBoxScanError] = useState(null);
+  const [boxManual, setBoxManual] = useState('');
+
+  function boxNameFromScan(text) {
+    try {
+      const u = new URL(text);
+      const m = u.pathname.match(/\/box\/(.+)$/);
+      if (m) return decodeURIComponent(m[1]);
+    } catch (e) {}
+    return null;
+  }
+  function stopBoxScan() {
+    try { if (boxScannerRef.current) boxScannerRef.current.reset(); } catch (_) {}
+    boxScannerRef.current = null;
+  }
+  async function startBoxScan() {
+    setBoxScanError(null);
+    try {
+      const ZX = await loadZXing();
+      const hints = new Map();
+      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.QR_CODE]);
+      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZX.BrowserMultiFormatReader(hints);
+      boxScannerRef.current = reader;
+      await reader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        boxVideoRef.current,
+        (result) => {
+          if (!result) return;
+          const name = boxNameFromScan(result.getText());
+          if (!name) return; // not one of our labels, keep looking
+          stopBoxScan();
+          fileScannedBox(name);
+        }
+      );
+    } catch (e) {
+      setBoxScanError("Camera scanning isn't available here - type the box name below instead.");
+    }
+  }
+  async function fileScannedBox(name) {
+    const item = scanningBoxItem;
+    if (!item || !name) return;
+    try {
+      const res = await fetch('/api/items/' + item.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ box: name }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setScanningBoxItem(null);
+      setBoxManual('');
+      setOpenItem(data.item);
+      setNotice('Filed into "' + name + '".');
+      await loadItems();
+    } catch (e) {
+      setBoxScanError('Could not file it: ' + e.message);
+    }
+  }
+  useEffect(() => {
+    if (scanningBoxItem) { startBoxScan(); }
+    return () => { stopBoxScan(); };
+  }, [scanningBoxItem]);
+
   async function lookupIsbn(isbn) {
     const clean = String(isbn || '').replace(/[^0-9Xx]/g, '');
     if (!clean) return;
@@ -1662,6 +1730,32 @@ export default function Home() {
         </div>
       )}
 
+      {scanningBoxItem && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 140 }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 0 }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Scan the box label</span>
+              <button type="button" onClick={() => { stopBoxScan(); setScanningBoxItem(null); }} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <p style={{ color: colors.inkSoft, fontSize: 13.5, margin: '0 0 12px' }}>
+                Point the camera at the printed QR on the box. It files <strong>{scanningBoxItem.name || 'this item'}</strong> into that box.
+              </p>
+              {boxScanError && <p style={{ color: colors.accent, fontSize: 13, marginBottom: 12 }}>{boxScanError}</p>}
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
+                <video ref={boxVideoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', inset: '20%', border: '2px solid rgba(124,203,43,0.9)', borderRadius: 10 }} />
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint, marginBottom: 6 }}>OR TYPE THE BOX NAME</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="text" value={boxManual} onChange={(e) => setBoxManual(e.target.value)} placeholder="e.g. Box 3" style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+                <button type="button" onClick={() => { if (boxManual.trim()) { stopBoxScan(); fileScannedBox(boxManual.trim()); } }} disabled={!boxManual.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: boxManual.trim() ? 1 : 0.5 }}>File</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {openItem && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ background: '#fff', width: '100%', maxWidth: 640, maxHeight: '88vh', overflowY: 'auto', borderRadius: '24px 24px 0 0', padding: 0 }}>
@@ -1755,6 +1849,20 @@ export default function Home() {
                   Box: {openItem.box} &middot; {openItem.category || 'uncategorised'}
                 </p>
               )}
+
+              <button
+                type="button"
+                onClick={() => { setBoxScanError(null); setBoxManual(''); setScanningBoxItem(openItem); }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: 13, marginBottom: 16, background: colors.brand, color: colors.ink, border: 'none', borderRadius: 999, fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <path d="M14 14h3M14 17v3M17 17h3v3M20 14v.01" />
+                </svg>
+                Scan box QR to file it
+              </button>
 
               {openItem.type !== 'book' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
