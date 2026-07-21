@@ -30,7 +30,9 @@ export default function BoxPage() {
   const params = useParams();
   // Next.js already URL-decodes route params, so use it as-is.
   const raw = params && params.code ? params.code : '';
-  const boxName = Array.isArray(raw) ? raw[0] : raw;
+  const rawStr = Array.isArray(raw) ? raw[0] : raw;
+  let boxName = rawStr;
+  try { boxName = decodeURIComponent(rawStr); } catch (e) {}
 
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
