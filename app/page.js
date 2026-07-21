@@ -1075,6 +1075,20 @@ export default function Home() {
               {t === 'log' ? 'LOG IT' : t === 'inventory' ? 'SILO' : t === 'library' ? 'LIBRARY' : t === 'fileit' ? 'FILE-IT' : 'FIND IT'}
             </button>
           ))}
+          <button
+            key="labels"
+            onClick={() => { window.location.href = '/labels'; }}
+            style={{
+              flex: 1, background: 'transparent', border: 'none',
+              borderBottom: '3px solid transparent',
+              color: colors.inkFaint,
+              fontWeight: 600, fontSize: 11.5, letterSpacing: '0.05em',
+              padding: '15px 4px 12px', cursor: 'pointer',
+              transition: 'color 0.15s ease',
+            }}
+          >
+            LABELS
+          </button>
         </nav>
       </div>
 
