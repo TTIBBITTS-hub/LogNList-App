@@ -239,6 +239,18 @@ export default function Home() {
     loadItems();
   }, []);
 
+  // Open a specific item if the URL asks for it (e.g. /?item=<id> from a box page).
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      const wanted = new URLSearchParams(window.location.search).get('item');
+      if (wanted) {
+        const it = items.find((i) => String(i.id) === String(wanted));
+        if (it) setOpenItem(it);
+      }
+    } catch (e) {}
+  }, [loaded]);
+
   useEffect(() => {
     if (addingBook && bookStep === 'scan') { startScan(); }
     return () => { stopScan(); };
