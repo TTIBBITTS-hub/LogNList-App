@@ -787,7 +787,7 @@ export default function Home() {
       scannerRef.current = reader;
       setScanActive(true);
       await reader.decodeFromConstraints(
-        { video: { facingMode: 'environment' } },
+        { video: { facingMode: 'environment', width: { ideal: 1280 } } },
         videoRef.current,
         (result) => {
           if (!result) return;
@@ -817,6 +817,13 @@ export default function Home() {
   // Scan a printed box QR to set a NEW book's location (before it's saved) ----
   const bookBoxVideoRef = useRef(null);
   const [scanningBookBox, setScanningBookBox] = useState(false);
+
+  // Scan a printed box QR to SEE what's inside that box ----
+  const viewBoxVideoRef = useRef(null);
+  const [scanningBoxView, setScanningBoxView] = useState(false);
+  const [viewBoxError, setViewBoxError] = useState(null);
+  const [viewBoxManual, setViewBoxManual] = useState('');
+  const [viewingBox, setViewingBox] = useState(null); // box name currently being viewed
 
   function boxNameFromScan(text) {
     try {
@@ -910,6 +917,45 @@ export default function Home() {
     if (scanningBookBox) { startBookBoxScan(); }
     return () => { stopBoxScan(); };
   }, [scanningBookBox]);
+
+  // Scan a box label to open a read-out of everything inside that box.
+  async function startBoxViewScan() {
+    setViewBoxError(null);
+    try {
+      const ZX = await loadZXing();
+      const hints = new Map();
+      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.QR_CODE]);
+      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZX.BrowserMultiFormatReader(hints);
+      boxScannerRef.current = reader;
+      await reader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        viewBoxVideoRef.current,
+        (result) => {
+          if (!result) return;
+          const name = boxNameFromScan(result.getText());
+          if (!name) return; // not one of our labels, keep looking
+          stopBoxScan();
+          setScanningBoxView(false);
+          setViewBoxManual('');
+          setViewingBox(name);
+        }
+      );
+    } catch (e) {
+      setViewBoxError("Camera scanning isn't available here \u2014 type the box name below instead.");
+    }
+  }
+  useEffect(() => {
+    if (scanningBoxView) { startBoxViewScan(); }
+    return () => { stopBoxScan(); };
+  }, [scanningBoxView]);
+
+  // Everything filed into the box we're viewing (forgiving on case / spacing).
+  const viewingBoxItems = viewingBox
+    ? items.filter(
+        (i) => i.type !== 'file' && (i.box || '').trim().toLowerCase() === viewingBox.trim().toLowerCase()
+      )
+    : [];
 
   async function lookupIsbn(isbn) {
     const clean = String(isbn || '').replace(/[^0-9Xx]/g, '');
@@ -1275,6 +1321,17 @@ export default function Home() {
         {loaded && tab === 'inventory' && (
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Silo ({unfiledItems.length})</h2>
+            <button
+              type="button"
+              onClick={() => { setViewBoxError(null); setViewBoxManual(''); setScanningBoxView(true); }}
+              style={{ width: '100%', marginBottom: 16, padding: '13px 14px', borderRadius: 12, border: 'none', background: colors.brand, color: colors.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.ink} strokeWidth="2" style={{ flexShrink: 0 }}>
+                <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
+                <path d="M7 12h10" />
+              </svg>
+              Scan a box to see what&rsquo;s inside
+            </button>
             {unfiledItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40, fontSize: 15, lineHeight: 1.5, padding: '0 20px' }}>{emptyMsg}</p>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
               {unfiledItems.map((item) => {
@@ -1844,6 +1901,85 @@ export default function Home() {
                 <div style={{ position: 'absolute', inset: '20%', border: '2px solid rgba(124,203,43,0.9)', borderRadius: 10 }} />
               </div>
               <button type="button" onClick={() => { stopBoxScan(); setScanningBookBox(false); }} style={{ ...outlineBtn, width: '100%' }}>Cancel &mdash; I&rsquo;ll type it</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scanningBoxView && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 150 }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 0 }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Scan a box</span>
+              <button type="button" onClick={() => { stopBoxScan(); setScanningBoxView(false); }} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <p style={{ color: colors.inkSoft, fontSize: 13.5, margin: '0 0 12px' }}>
+                Point the camera at the printed QR on the box to see everything inside it.
+              </p>
+              {viewBoxError && <p style={{ color: colors.accent, fontSize: 13, marginBottom: 12 }}>{viewBoxError}</p>}
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
+                <video ref={viewBoxVideoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', inset: '20%', border: '2px solid rgba(124,203,43,0.9)', borderRadius: 10 }} />
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint, marginBottom: 6 }}>OR TYPE THE BOX NAME</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="text" list="boxlist" value={viewBoxManual} onChange={(e) => setViewBoxManual(e.target.value)} placeholder="e.g. Box 3" style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+                <button type="button" onClick={() => { if (viewBoxManual.trim()) { stopBoxScan(); setScanningBoxView(false); setViewingBox(viewBoxManual.trim()); setViewBoxManual(''); } }} disabled={!viewBoxManual.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: viewBoxManual.trim() ? 1 : 0.5 }}>Open</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingBox && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 150 }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: 560, maxHeight: '85vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', padding: 0 }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: colors.inkFaint, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em' }}>INSIDE THIS BOX</div>
+                <div style={{ color: '#fff', fontWeight: 700, fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{viewingBox} &middot; {viewingBoxItems.length} {viewingBoxItems.length === 1 ? 'item' : 'items'}</div>
+              </div>
+              <button type="button" onClick={() => setViewingBox(null)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1, flexShrink: 0, marginLeft: 12 }}>&times;</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              {viewingBoxItems.length === 0 ? (
+                <p style={{ color: colors.inkFaint, textAlign: 'center', margin: '24px 0', fontSize: 14.5, lineHeight: 1.5 }}>
+                  Nothing&rsquo;s filed into <strong>{viewingBox}</strong> yet. Open an item and tap <strong>Scan box QR to file it</strong> to drop things in here.
+                </p>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
+                  {viewingBoxItems.map((item) => {
+                    const isBox = item.type === 'box';
+                    const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => { setViewingBox(null); setOpenItem(item); setNotice(null); }}
+                        style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
+                      >
+                        {item.status === 'listed' && item.listing?.price != null && (
+                          <div style={{ position: 'absolute', top: 10, right: 10, background: colors.success, color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>
+                            ${item.listing.price}
+                          </div>
+                        )}
+                        {item.photos?.[0] ? (
+                          <img src={item.photos[0]} alt="" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
+                        ) : (
+                          <div style={{ width: 50, height: 50, background: colors.bgAlt, borderRadius: 9, marginBottom: 10 }} />
+                        )}
+                        <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
+                          {isBox ? limitWords(item.notes || 'Mixed box', 6) : limitWords(item.name || 'Unidentified item', 6)}
+                        </div>
+                        <span style={{ display: 'inline-block', marginTop: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '3px 8px', borderRadius: 999, background: sc.bg, color: sc.text }}>
+                          {isBox ? 'MIXED BOX' : item.status?.toUpperCase()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <button type="button" onClick={() => { setViewingBox(null); setScanningBoxView(true); }} style={{ ...outlineBtn, width: '100%', marginTop: 18 }}>Scan another box</button>
             </div>
           </div>
         </div>
