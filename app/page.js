@@ -819,25 +819,58 @@ export default function Home() {
     setBookBusy(true);
     let url;
     try {
-      const ZX = await loadZXing();
-      const hints = new Map();
-      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.EAN_13, ZX.BarcodeFormat.EAN_8, ZX.BarcodeFormat.UPC_A]);
-      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
-      const reader = new ZX.BrowserMultiFormatReader(hints);
       url = URL.createObjectURL(file);
       const img = new Image();
+      img.decoding = 'async';
       img.src = url;
       await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('image load failed')); });
+
       let raw = '';
+
+      // 1) Use the phone's own barcode reader if it has one (much better at 1D barcodes).
       try {
-        const result = await reader.decodeFromImageElement(img);
-        raw = (result.getText() || '').replace(/[^0-9Xx]/g, '');
-      } finally {
+        if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+          const det = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
+          const codes = await det.detect(img);
+          if (codes && codes.length) raw = (codes[0].rawValue || '').replace(/[^0-9Xx]/g, '');
+        }
+      } catch (_) {}
+
+      // 2) Fall back to ZXing, trying the full photo and a downscaled copy.
+      if (!isBookIsbn(raw)) {
+        const ZX = await loadZXing();
+        const hints = new Map();
+        hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.EAN_13, ZX.BarcodeFormat.EAN_8, ZX.BarcodeFormat.UPC_A]);
+        hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+        const reader = new ZX.BrowserMultiFormatReader(hints);
+        const tries = [img];
+        try {
+          const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+          const maxDim = Math.max(w, h);
+          if (maxDim > 1600) {
+            const s = 1600 / maxDim;
+            const c = document.createElement('canvas');
+            c.width = Math.round(w * s); c.height = Math.round(h * s);
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+            const small = new Image();
+            small.src = c.toDataURL('image/jpeg', 0.92);
+            await new Promise((res) => { small.onload = res; small.onerror = res; });
+            tries.push(small);
+          }
+        } catch (_) {}
+        for (const cand of tries) {
+          try {
+            const result = await reader.decodeFromImageElement(cand);
+            const v = (result.getText() || '').replace(/[^0-9Xx]/g, '');
+            if (isBookIsbn(v)) { raw = v; break; }
+          } catch (_) {}
+        }
         try { reader.reset(); } catch (_) {}
       }
+
       if (!isBookIsbn(raw)) {
         setBookBusy(false);
-        setBookError("That didn't look like a book barcode \u2014 get the whole barcode square in the photo, or type the ISBN.");
+        setBookError("Couldn't read that barcode \u2014 take the photo again with the barcode filling most of the frame and in focus, or type the ISBN.");
         return;
       }
       lookupIsbn(raw); // takes over: fetches the book and moves to the confirm step
@@ -1764,7 +1797,7 @@ export default function Home() {
 
               {bookStep === 'scan' && (
                 <div>
-                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 12 }}>Snap a photo of the barcode on the back &mdash; the long one starting <strong>978</strong>. Get it square in the frame and in focus.</p>
+                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 12 }}>Snap a photo of the barcode on the back &mdash; the long one starting <strong>978</strong>. Get in close so the barcode fills most of the photo and is sharp.</p>
                   <label style={{ ...primaryBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', marginBottom: 16, opacity: bookBusy ? 0.6 : 1 }} onClick={() => stopScan()}>
                     {bookBusy ? 'Reading\u2026' : 'Snap the barcode'}
                     <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={decodeBarcodeFromPhoto} />
