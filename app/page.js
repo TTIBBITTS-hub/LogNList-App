@@ -764,6 +764,7 @@ export default function Home() {
     setAddingBook(true);
   }
   function closeAddBook() { stopScan(); setAddingBook(false); }
+  function bookBack() { setBookError(null); setBookStep('scan'); }
 
   function loadZXing() {
     return new Promise((resolve, reject) => {
@@ -777,26 +778,16 @@ export default function Home() {
   }
   async function startScan() {
     setBookError(null);
-    scanLastRef.current = null;
     stopAllScanners();
     try {
       const ZX = await loadZXing();
-      const hints = new Map();
-      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.EAN_13, ZX.BarcodeFormat.EAN_8, ZX.BarcodeFormat.UPC_A]);
-      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
-      const reader = new ZX.BrowserMultiFormatReader(hints);
+      const reader = new ZX.BrowserMultiFormatReader();
       scannerRef.current = reader;
       setScanActive(true);
       await reader.decodeFromConstraints(
-        { video: { facingMode: 'environment', width: { ideal: 1280 } } },
+        { video: { facingMode: 'environment' } },
         videoRef.current,
-        (result) => {
-          if (!result) return;
-          const raw = result.getText().replace(/[^0-9Xx]/g, '');
-          if (!isBookIsbn(raw)) return;                                   // skip price / non-book barcodes (checksum already validated by the reader)
-          stopScan();
-          lookupIsbn(raw);
-        }
+        (result) => { if (result) { const t = result.getText(); stopScan(); lookupIsbn(t); } }
       );
     } catch (e) {
       setScanSupported(false); setScanActive(false);
@@ -1823,7 +1814,11 @@ export default function Home() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 130 }}>
           <div style={{ background: '#fff', width: '100%', maxWidth: 560, maxHeight: '92vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', padding: 0 }}>
             <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Add a book</span>
+              {bookStep !== 'scan' ? (
+                <button type="button" onClick={bookBack} style={{ background: 'transparent', border: 'none', color: '#fff', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, padding: 0 }}>&#8249; Back</button>
+              ) : (
+                <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Add a book</span>
+              )}
               <button type="button" onClick={closeAddBook} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
             </div>
 
@@ -1832,17 +1827,15 @@ export default function Home() {
 
               {bookStep === 'scan' && (
                 <div>
-                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 12 }}>Snap a photo of the barcode on the back &mdash; the long one starting <strong>978</strong>. Get in close so the barcode fills most of the photo and is sharp.</p>
-                  <label style={{ ...primaryBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', marginBottom: 16, opacity: bookBusy ? 0.6 : 1 }} onClick={() => stopScan()}>
-                    {bookBusy ? 'Reading\u2026' : 'Snap the barcode'}
-                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={decodeBarcodeFromPhoto} />
-                  </label>
-
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint, marginBottom: 8, textAlign: 'center' }}>OR HOLD IT UP TO THE LIVE CAMERA</div>
+                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 12 }}>Hold the camera over the barcode on the back &mdash; the long one starting <strong>978</strong>. It grabs it once it&rsquo;s in focus.</p>
                   <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
                     <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <div style={{ position: 'absolute', inset: '28% 12%', border: `2px solid rgba(124,203,43,0.9)`, borderRadius: 8 }} />
                   </div>
+                  <label style={{ ...outlineBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', marginBottom: 12, opacity: bookBusy ? 0.6 : 1 }} onClick={() => stopScan()}>
+                    {bookBusy ? 'Reading\u2026' : 'Not catching? Snap a photo instead'}
+                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={decodeBarcodeFromPhoto} />
+                  </label>
                   <div style={{ display: 'flex', gap: 10 }}>
                     <button type="button" onClick={() => { stopScan(); setBookStep('search'); }} style={{ ...outlineBtn, flex: 1 }}>Search by title</button>
                     <button type="button" onClick={() => { stopScan(); setBookIsbnInput(''); setBookStep('isbn'); }} style={{ ...outlineBtn, flex: 1 }}>Type ISBN</button>
