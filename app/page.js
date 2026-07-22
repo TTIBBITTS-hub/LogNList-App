@@ -1832,14 +1832,14 @@ export default function Home() {
                     <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <div style={{ position: 'absolute', inset: '28% 12%', border: `2px solid rgba(124,203,43,0.9)`, borderRadius: 8 }} />
                   </div>
-                  <label style={{ ...outlineBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', marginBottom: 12, opacity: bookBusy ? 0.6 : 1 }} onClick={() => stopScan()}>
-                    {bookBusy ? 'Reading\u2026' : 'Not catching? Snap a photo instead'}
-                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={decodeBarcodeFromPhoto} />
-                  </label>
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                     <button type="button" onClick={() => { stopScan(); setBookStep('search'); }} style={{ ...outlineBtn, flex: 1 }}>Search by title</button>
                     <button type="button" onClick={() => { stopScan(); setBookIsbnInput(''); setBookStep('isbn'); }} style={{ ...outlineBtn, flex: 1 }}>Type ISBN</button>
                   </div>
+                  <label style={{ ...primaryBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', opacity: bookBusy ? 0.6 : 1 }} onClick={() => stopScan()}>
+                    {bookBusy ? 'Reading\u2026' : 'Not catching? Snap a photo'}
+                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={decodeBarcodeFromPhoto} />
+                  </label>
                 </div>
               )}
 
@@ -1914,14 +1914,22 @@ export default function Home() {
                       </div>
 
                       <div style={{ marginBottom: 16 }}>
-                        <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>YOUR OWN PHOTO (optional \u2014 for special covers)</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
-                          {bookOwnPhoto && <img src={bookOwnPhoto} alt="" style={{ width: 44, height: 62, objectFit: 'cover', borderRadius: 6 }} />}
-                          <label style={{ ...outlineBtn, width: 'auto', padding: '10px 16px', fontSize: 13, cursor: 'pointer', display: 'inline-block' }}>
-                            {bookOwnPhoto ? 'Retake' : 'Add a photo'}
+                        <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>YOUR OWN PHOTO (optional &mdash; for special covers)</label>
+                        <div style={{ position: 'relative', width: 108, marginTop: 8 }}>
+                          <label style={{ display: 'block', width: 108, aspectRatio: '2 / 3', background: colors.bgAlt, border: `1px dashed ${colors.line}`, borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}>
+                            {bookOwnPhoto ? (
+                              <img src={bookOwnPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, color: colors.inkFaint }}>
+                                <span style={{ fontSize: 26, lineHeight: 1, fontWeight: 300 }}>+</span>
+                                <span style={{ fontSize: 11, fontWeight: 600 }}>Photo</span>
+                              </div>
+                            )}
                             <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleBookOwnPhoto} />
                           </label>
-                          {bookOwnPhoto && <button type="button" onClick={() => setBookOwnPhoto(null)} style={{ background: 'none', border: 'none', color: colors.accent, fontSize: 12.5, cursor: 'pointer' }}>Remove</button>}
+                          {bookOwnPhoto && (
+                            <button type="button" onClick={() => setBookOwnPhoto(null)} title="Remove photo" aria-label="Remove photo" style={photoRemoveBtn}>&times;</button>
+                          )}
                         </div>
                       </div>
 
