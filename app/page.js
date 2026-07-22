@@ -808,6 +808,47 @@ export default function Home() {
     scannerRef.current = null; scanLastRef.current = null; setScanActive(false);
   }
 
+  // Decode a book barcode from a still photo. The native camera focuses properly and
+  // shoots high-res, so a 1D barcode reads reliably here even when the live feed can't.
+  async function decodeBarcodeFromPhoto(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    stopAllScanners();
+    setBookError(null);
+    setBookBusy(true);
+    let url;
+    try {
+      const ZX = await loadZXing();
+      const hints = new Map();
+      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.EAN_13, ZX.BarcodeFormat.EAN_8, ZX.BarcodeFormat.UPC_A]);
+      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZX.BrowserMultiFormatReader(hints);
+      url = URL.createObjectURL(file);
+      const img = new Image();
+      img.src = url;
+      await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('image load failed')); });
+      let raw = '';
+      try {
+        const result = await reader.decodeFromImageElement(img);
+        raw = (result.getText() || '').replace(/[^0-9Xx]/g, '');
+      } finally {
+        try { reader.reset(); } catch (_) {}
+      }
+      if (!isBookIsbn(raw)) {
+        setBookBusy(false);
+        setBookError("That didn't look like a book barcode \u2014 get the whole barcode square in the photo, or type the ISBN.");
+        return;
+      }
+      lookupIsbn(raw); // takes over: fetches the book and moves to the confirm step
+    } catch (err) {
+      setBookBusy(false);
+      setBookError("Couldn't read the barcode from that photo \u2014 try again with the barcode filling the frame, or type the ISBN.");
+    } finally {
+      if (url) { try { URL.revokeObjectURL(url); } catch (_) {} }
+    }
+  }
+
   // ---- Scan a printed box QR to file the open item into that box ----
   const boxVideoRef = useRef(null);
   const boxScannerRef = useRef(null);
@@ -1723,7 +1764,13 @@ export default function Home() {
 
               {bookStep === 'scan' && (
                 <div>
-                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 12 }}>Hold the camera steady over the barcode on the back &mdash; the long one starting <strong>978</strong>. It&rsquo;ll grab it once it&rsquo;s in focus.</p>
+                  <p style={{ color: colors.inkSoft, fontSize: 13.5, marginBottom: 12 }}>Snap a photo of the barcode on the back &mdash; the long one starting <strong>978</strong>. Get it square in the frame and in focus.</p>
+                  <label style={{ ...primaryBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', marginBottom: 16, opacity: bookBusy ? 0.6 : 1 }} onClick={() => stopScan()}>
+                    {bookBusy ? 'Reading\u2026' : 'Snap the barcode'}
+                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={decodeBarcodeFromPhoto} />
+                  </label>
+
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint, marginBottom: 8, textAlign: 'center' }}>OR HOLD IT UP TO THE LIVE CAMERA</div>
                   <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
                     <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <div style={{ position: 'absolute', inset: '28% 12%', border: `2px solid rgba(124,203,43,0.9)`, borderRadius: 8 }} />
