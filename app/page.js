@@ -1813,7 +1813,7 @@ export default function Home() {
       {addingBook && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 130 }}>
           <div style={{ background: '#fff', width: '100%', maxWidth: 560, maxHeight: '92vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', padding: 0 }}>
-            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 2 }}>
               {bookStep !== 'scan' ? (
                 <button type="button" onClick={bookBack} style={{ background: 'transparent', border: 'none', color: '#fff', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, padding: 0 }}>&#8249; Back</button>
               ) : (
@@ -1895,6 +1895,15 @@ export default function Home() {
                           <input type="text" value={bookDraft.author} onChange={(e) => setBookDraft({ ...bookDraft, author: e.target.value })} style={{ ...inputStyle, marginBottom: 0, marginTop: 4 }} />
                         </div>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => { const q = (bookDraft.title || '').trim(); if (!q) return; setBookSearchQuery(q); setBookStep('search'); searchByTitle(q); }}
+                        disabled={!bookDraft.title.trim() || bookBusy}
+                        style={{ ...outlineBtn, width: '100%', marginBottom: 16, opacity: (bookDraft.title.trim() && !bookBusy) ? 1 : 0.5 }}
+                      >
+                        {bookBusy ? 'Searching\u2026' : 'Search this title to fill the details'}
+                      </button>
 
                       <div style={{ marginBottom: 12 }}>
                         <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>WHICH BOX IS IT IN?</label>
