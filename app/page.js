@@ -1321,17 +1321,6 @@ export default function Home() {
         {loaded && tab === 'inventory' && (
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Silo ({unfiledItems.length})</h2>
-            <button
-              type="button"
-              onClick={() => { setViewBoxError(null); setViewBoxManual(''); setScanningBoxView(true); }}
-              style={{ width: '100%', marginBottom: 16, padding: '13px 14px', borderRadius: 12, border: 'none', background: colors.brand, color: colors.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.ink} strokeWidth="2" style={{ flexShrink: 0 }}>
-                <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
-                <path d="M7 12h10" />
-              </svg>
-              Scan a box to see what&rsquo;s inside
-            </button>
             {unfiledItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40, fontSize: 15, lineHeight: 1.5, padding: '0 20px' }}>{emptyMsg}</p>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
               {unfiledItems.map((item) => {
@@ -1644,6 +1633,18 @@ export default function Home() {
                 </button>
               )}
             </div>
+
+            <button
+              type="button"
+              onClick={() => { setViewBoxError(null); setViewBoxManual(''); setScanningBoxView(true); }}
+              style={{ width: '100%', marginBottom: 20, padding: '13px 14px', borderRadius: 12, border: 'none', background: colors.brand, color: colors.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.ink} strokeWidth="2" style={{ flexShrink: 0 }}>
+                <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
+                <path d="M7 12h10" />
+              </svg>
+              Scan a box to see what&rsquo;s inside
+            </button>
 
             {searchResults.length === 0 ? (
               <p style={{ fontSize: 13.5, color: colors.inkFaint, textAlign: 'center', padding: '28px 0' }}>
