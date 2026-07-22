@@ -778,6 +778,7 @@ export default function Home() {
   async function startScan() {
     setBookError(null);
     scanLastRef.current = null;
+    stopAllScanners();
     try {
       const ZX = await loadZXing();
       const hints = new Map();
@@ -825,6 +826,31 @@ export default function Home() {
   const [viewBoxManual, setViewBoxManual] = useState('');
   const [viewingBox, setViewingBox] = useState(null); // box name currently being viewed
 
+  // --- Camera teardown shared by every scanner ---
+  // All four scanners (ISBN, file-into-box, book location, view box) use the one
+  // phone camera. If any of them leaves the camera stream open, the next scanner
+  // gets a "device busy" error and silently fails. So before starting ANY scanner
+  // we fully release every reader and every video stream first.
+  function killVideoStream(ref) {
+    try {
+      const v = ref && ref.current;
+      if (v && v.srcObject) {
+        v.srcObject.getTracks().forEach((t) => { try { t.stop(); } catch (_) {} });
+        v.srcObject = null;
+      }
+    } catch (_) {}
+  }
+  function stopAllScanners() {
+    try { if (scannerRef.current) scannerRef.current.reset(); } catch (_) {}
+    try { if (boxScannerRef.current) boxScannerRef.current.reset(); } catch (_) {}
+    scannerRef.current = null;
+    boxScannerRef.current = null;
+    killVideoStream(videoRef);
+    killVideoStream(boxVideoRef);
+    killVideoStream(bookBoxVideoRef);
+    killVideoStream(viewBoxVideoRef);
+  }
+
   function boxNameFromScan(text) {
     try {
       const u = new URL(text);
@@ -839,6 +865,7 @@ export default function Home() {
   }
   async function startBoxScan() {
     setBoxScanError(null);
+    stopAllScanners();
     try {
       const ZX = await loadZXing();
       const hints = new Map();
@@ -889,6 +916,7 @@ export default function Home() {
   // Scan a box label to fill in the location of a book being added.
   async function startBookBoxScan() {
     setBookError(null);
+    stopAllScanners();
     try {
       const ZX = await loadZXing();
       const hints = new Map();
@@ -921,6 +949,7 @@ export default function Home() {
   // Scan a box label to open a read-out of everything inside that box.
   async function startBoxViewScan() {
     setViewBoxError(null);
+    stopAllScanners();
     try {
       const ZX = await loadZXing();
       const hints = new Map();
