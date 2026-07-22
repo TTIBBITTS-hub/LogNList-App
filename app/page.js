@@ -787,7 +787,7 @@ export default function Home() {
       scannerRef.current = reader;
       setScanActive(true);
       await reader.decodeFromConstraints(
-        { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, advanced: [{ focusMode: 'continuous' }] } },
+        { video: { facingMode: 'environment' } },
         videoRef.current,
         (result) => {
           if (!result) return;
