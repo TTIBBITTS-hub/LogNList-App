@@ -787,13 +787,12 @@ export default function Home() {
       scannerRef.current = reader;
       setScanActive(true);
       await reader.decodeFromConstraints(
-        { video: { facingMode: 'environment' } },
+        { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 }, advanced: [{ focusMode: 'continuous' }] } },
         videoRef.current,
         (result) => {
           if (!result) return;
           const raw = result.getText().replace(/[^0-9Xx]/g, '');
-          if (!isBookIsbn(raw)) return;                                   // skip price / non-book barcodes
-          if (scanLastRef.current !== raw) { scanLastRef.current = raw; return; } // confirm the same read twice
+          if (!isBookIsbn(raw)) return;                                   // skip price / non-book barcodes (checksum already validated by the reader)
           stopScan();
           lookupIsbn(raw);
         }
@@ -814,6 +813,10 @@ export default function Home() {
   const [scanningBoxItem, setScanningBoxItem] = useState(null);
   const [boxScanError, setBoxScanError] = useState(null);
   const [boxManual, setBoxManual] = useState('');
+
+  // Scan a printed box QR to set a NEW book's location (before it's saved) ----
+  const bookBoxVideoRef = useRef(null);
+  const [scanningBookBox, setScanningBookBox] = useState(false);
 
   function boxNameFromScan(text) {
     try {
@@ -876,6 +879,38 @@ export default function Home() {
     return () => { stopBoxScan(); };
   }, [scanningBoxItem]);
 
+  // Scan a box label to fill in the location of a book being added.
+  async function startBookBoxScan() {
+    setBookError(null);
+    try {
+      const ZX = await loadZXing();
+      const hints = new Map();
+      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.QR_CODE]);
+      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZX.BrowserMultiFormatReader(hints);
+      boxScannerRef.current = reader;
+      await reader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        bookBoxVideoRef.current,
+        (result) => {
+          if (!result) return;
+          const name = boxNameFromScan(result.getText());
+          if (!name) return; // not one of our labels, keep looking
+          stopBoxScan();
+          setBookBox(name);
+          setScanningBookBox(false);
+        }
+      );
+    } catch (e) {
+      setBookError("Camera scanning isn't available here \u2014 type the box name instead.");
+      setScanningBookBox(false);
+    }
+  }
+  useEffect(() => {
+    if (scanningBookBox) { startBookBoxScan(); }
+    return () => { stopBoxScan(); };
+  }, [scanningBookBox]);
+
   async function lookupIsbn(isbn) {
     const clean = String(isbn || '').replace(/[^0-9Xx]/g, '');
     if (!clean) return;
@@ -923,8 +958,9 @@ export default function Home() {
     setBookDraft({ title: r.title, author: r.author, year: r.year, isbn: r.isbn, cover: r.cover });
     setBookStep('confirm');
   }
-  function startManualEntry() {
-    setBookDraft({ title: '', author: '', year: '', isbn: '', cover: '' });
+  function startManualEntry(prefillTitle) {
+    const title = typeof prefillTitle === 'string' ? prefillTitle.trim() : '';
+    setBookDraft({ title, author: '', year: '', isbn: '', cover: '' });
     setBookStep('confirm');
   }
 
@@ -1645,7 +1681,7 @@ export default function Home() {
                       ))}
                     </div>
                   )}
-                  <button type="button" onClick={startManualEntry} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>Can&rsquo;t find it? Enter it manually</button>
+                  <button type="button" onClick={() => startManualEntry(bookSearchQuery)} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>Can&rsquo;t find it? Enter it manually</button>
                 </div>
               )}
 
@@ -1667,7 +1703,18 @@ export default function Home() {
 
                       <div style={{ marginBottom: 12 }}>
                         <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>WHICH BOX IS IT IN?</label>
-                        <input type="text" list="boxlist" placeholder="e.g. Books Box 3" value={bookBox} onChange={(e) => setBookBox(e.target.value)} style={{ ...inputStyle, marginBottom: 0, marginTop: 4 }} />
+                        <button
+                          type="button"
+                          onClick={() => { setBoxScanError(null); setScanningBookBox(true); }}
+                          style={{ width: '100%', marginTop: 6, marginBottom: 8, padding: '12px 14px', borderRadius: 12, border: 'none', background: colors.brand, color: colors.ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.ink} strokeWidth="2" style={{ flexShrink: 0 }}>
+                            <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
+                            <path d="M7 12h10" />
+                          </svg>
+                          {bookBox.trim() ? `In "${bookBox.trim()}" \u2014 scan again` : 'Scan the box label'}
+                        </button>
+                        <input type="text" list="boxlist" placeholder={'\u2026 or type the box name'} value={bookBox} onChange={(e) => setBookBox(e.target.value)} style={{ ...inputStyle, marginBottom: 0, marginTop: 0, fontSize: 13.5 }} />
                         <datalist id="boxlist">{recentBoxes.map((b) => <option key={b} value={b} />)}</datalist>
                       </div>
 
@@ -1776,6 +1823,27 @@ export default function Home() {
                 <input type="text" value={boxManual} onChange={(e) => setBoxManual(e.target.value)} placeholder="e.g. Box 3" style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
                 <button type="button" onClick={() => { if (boxManual.trim()) { stopBoxScan(); fileScannedBox(boxManual.trim()); } }} disabled={!boxManual.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: boxManual.trim() ? 1 : 0.5 }}>File</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scanningBookBox && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 160 }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 0 }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Scan the box label</span>
+              <button type="button" onClick={() => { stopBoxScan(); setScanningBookBox(false); }} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <p style={{ color: colors.inkSoft, fontSize: 13.5, margin: '0 0 12px' }}>
+                Point the camera at the printed QR on the box. That sets where this book is stored &mdash; no typing.
+              </p>
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
+                <video ref={bookBoxVideoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', inset: '20%', border: '2px solid rgba(124,203,43,0.9)', borderRadius: 10 }} />
+              </div>
+              <button type="button" onClick={() => { stopBoxScan(); setScanningBookBox(false); }} style={{ ...outlineBtn, width: '100%' }}>Cancel &mdash; I&rsquo;ll type it</button>
             </div>
           </div>
         </div>
