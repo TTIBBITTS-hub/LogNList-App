@@ -808,8 +808,49 @@ export default function Home() {
     scannerRef.current = null; scanLastRef.current = null; setScanActive(false);
   }
 
-  // Decode a book barcode from a still photo. The native camera focuses properly and
-  // shoots high-res, so a 1D barcode reads reliably here even when the live feed can't.
+  // Turn a loaded <img> into a capped-size JPEG data URL (for the barcode engines).
+  function imageToDataUrl(img, maxDim) {
+    try {
+      const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * scale));
+      c.height = Math.max(1, Math.round(h * scale));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.95);
+    } catch (_) { return null; }
+  }
+  // Quagga2 - a barcode engine built specifically for 1D codes like book EANs.
+  function loadQuagga() {
+    return new Promise((resolve, reject) => {
+      if (typeof window !== 'undefined' && window.Quagga) return resolve(window.Quagga);
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js';
+      s.onload = () => resolve(window.Quagga);
+      s.onerror = () => reject(new Error('barcode engine failed to load'));
+      document.head.appendChild(s);
+    });
+  }
+  function quaggaDecode(src) {
+    return new Promise((resolve) => {
+      loadQuagga().then((Q) => {
+        try {
+          Q.decodeSingle({
+            src,
+            numOfWorkers: 0,
+            locate: true,
+            inputStream: { size: 1600 },
+            decoder: { readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader'] },
+          }, (result) => {
+            const code = result && result.codeResult && result.codeResult.code;
+            resolve(code ? String(code).replace(/[^0-9Xx]/g, '') : '');
+          });
+        } catch (_) { resolve(''); }
+      }).catch(() => resolve(''));
+    });
+  }
+
+  // Decode a book barcode from a still photo, trying three engines in order.
   async function decodeBarcodeFromPhoto(e) {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
@@ -818,6 +859,7 @@ export default function Home() {
     setBookError(null);
     setBookBusy(true);
     let url;
+    const isHit = (v) => isBookIsbn((v || '').replace(/[^0-9Xx]/g, ''));
     try {
       url = URL.createObjectURL(file);
       const img = new Image();
@@ -827,7 +869,7 @@ export default function Home() {
 
       let raw = '';
 
-      // 1) Use the phone's own barcode reader if it has one (much better at 1D barcodes).
+      // 1) The phone's own barcode reader, if it has one (best result when present).
       try {
         if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
           const det = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
@@ -836,41 +878,34 @@ export default function Home() {
         }
       } catch (_) {}
 
-      // 2) Fall back to ZXing, trying the full photo and a downscaled copy.
-      if (!isBookIsbn(raw)) {
-        const ZX = await loadZXing();
-        const hints = new Map();
-        hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.EAN_13, ZX.BarcodeFormat.EAN_8, ZX.BarcodeFormat.UPC_A]);
-        hints.set(ZX.DecodeHintType.TRY_HARDER, true);
-        const reader = new ZX.BrowserMultiFormatReader(hints);
-        const tries = [img];
-        try {
-          const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-          const maxDim = Math.max(w, h);
-          if (maxDim > 1600) {
-            const s = 1600 / maxDim;
-            const c = document.createElement('canvas');
-            c.width = Math.round(w * s); c.height = Math.round(h * s);
-            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-            const small = new Image();
-            small.src = c.toDataURL('image/jpeg', 0.92);
-            await new Promise((res) => { small.onload = res; small.onerror = res; });
-            tries.push(small);
-          }
-        } catch (_) {}
-        for (const cand of tries) {
-          try {
-            const result = await reader.decodeFromImageElement(cand);
-            const v = (result.getText() || '').replace(/[^0-9Xx]/g, '');
-            if (isBookIsbn(v)) { raw = v; break; }
-          } catch (_) {}
+      // 2) Quagga - dedicated 1D engine, good at finding a book barcode inside a photo.
+      if (!isHit(raw)) {
+        const big = imageToDataUrl(img, 2000) || url;
+        raw = await quaggaDecode(big);
+        if (!isHit(raw)) {
+          const small = imageToDataUrl(img, 1000);
+          if (small) raw = await quaggaDecode(small);
         }
-        try { reader.reset(); } catch (_) {}
       }
 
-      if (!isBookIsbn(raw)) {
+      // 3) Last resort: ZXing.
+      if (!isHit(raw)) {
+        try {
+          const ZX = await loadZXing();
+          const hints = new Map();
+          hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.EAN_13, ZX.BarcodeFormat.EAN_8, ZX.BarcodeFormat.UPC_A]);
+          hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+          const reader = new ZX.BrowserMultiFormatReader(hints);
+          try {
+            const result = await reader.decodeFromImageElement(img);
+            raw = (result.getText() || '').replace(/[^0-9Xx]/g, '');
+          } finally { try { reader.reset(); } catch (_) {} }
+        } catch (_) {}
+      }
+
+      if (!isHit(raw)) {
         setBookBusy(false);
-        setBookError("Couldn't read that barcode \u2014 take the photo again with the barcode filling most of the frame and in focus, or type the ISBN.");
+        setBookError("Couldn't read that barcode. Get in close so the barcode fills the frame and is sharp, then try again \u2014 or type the ISBN below.");
         return;
       }
       lookupIsbn(raw); // takes over: fetches the book and moves to the confirm step
