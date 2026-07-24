@@ -161,9 +161,9 @@ export default function Home() {
 
   // Quick Capture: snap a photo and it saves straight to the Silo with no other
   // details. Camera is ready again for the next one; details get filled in later.
-  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickShots, setQuickShots] = useState([]); // { id, dataUrl, status } captured this session
   const [quickTick, setQuickTick] = useState(false);
-  const [quickCount, setQuickCount] = useState(0);
+  const quickDrainRef = useRef(0);
 
   // Editable details on the open item (used to finish off Quick Capture items).
   const [detailDraft, setDetailDraft] = useState({ name: '', category: '', box: '', notes: '' });
@@ -266,6 +266,14 @@ export default function Home() {
       setDetailSaved(false);
     }
   }, [openItem?.id]);
+
+  // When all in-flight Quick Capture saves finish, refresh the Silo once so it's
+  // up to date when you head there - without reloading after every single snap.
+  useEffect(() => {
+    const saving = quickShots.filter((s) => s.status === 'saving').length;
+    if (quickDrainRef.current > 0 && saving === 0) { loadItems(); }
+    quickDrainRef.current = saving;
+  }, [quickShots]);
 
   // Open a specific item if the URL asks for it (e.g. /?item=<id> from a box page).
   useEffect(() => {
@@ -471,29 +479,48 @@ export default function Home() {
   }
 
   // Quick Capture: one photo straight into the Silo, no other details required.
+  // Quick Capture: compress locally and show it straight away, then save in the
+  // background so you can keep snapping without waiting on the network.
+  function saveQuickShot(localId, dataUrl) {
+    fetch('/api/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'item', name: '', category: '', box: '', notes: '', photos: [dataUrl] }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setQuickShots((prev) => prev.map((s) => (s.id === localId ? { ...s, status: 'saved' } : s)));
+      })
+      .catch(() => {
+        setQuickShots((prev) => prev.map((s) => (s.id === localId ? { ...s, status: 'error' } : s)));
+      });
+  }
+
   async function quickCapture(e) {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    setQuickBusy(true);
     setError(null);
+    let dataUrl;
     try {
-      const dataUrl = await compressImage(file);
-      const res = await fetch('/api/items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'item', name: '', category: '', box: '', notes: '', photos: [dataUrl] }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setQuickCount((n) => n + 1);
-      setQuickTick(true);
-      setTimeout(() => setQuickTick(false), 1200);
-      await loadItems();
+      dataUrl = await compressImage(file);
     } catch (err) {
       setError('Quick capture failed: ' + err.message);
+      return;
     }
-    setQuickBusy(false);
+    const localId = Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    setQuickShots((prev) => [...prev, { id: localId, dataUrl, status: 'saving' }]);
+    setQuickTick(true);
+    setTimeout(() => setQuickTick(false), 900);
+    saveQuickShot(localId, dataUrl); // fire and forget - doesn't block the next snap
+  }
+
+  function retryQuickShot(localId) {
+    const shot = quickShots.find((s) => s.id === localId);
+    if (!shot) return;
+    setQuickShots((prev) => prev.map((s) => (s.id === localId ? { ...s, status: 'saving' } : s)));
+    saveQuickShot(localId, shot.dataUrl);
   }
 
   // Save the editable details on the open item (finishes a Quick Capture item).
@@ -1454,7 +1481,13 @@ export default function Home() {
               ))}
             </div>
 
-            {logMode === 'quick' && (
+            {logMode === 'quick' && (() => {
+              const total = quickShots.length;
+              const saved = quickShots.filter((s) => s.status === 'saved').length;
+              const saving = quickShots.filter((s) => s.status === 'saving').length;
+              const failed = quickShots.filter((s) => s.status === 'error').length;
+              const recent = quickShots.slice(-10).reverse();
+              return (
               <div>
                 <label
                   style={{
@@ -1462,7 +1495,7 @@ export default function Home() {
                     gap: 12, width: '100%', aspectRatio: '4 / 3', maxHeight: 340,
                     background: quickTick ? 'rgba(15,122,84,0.08)' : colors.bgAlt,
                     border: `2px dashed ${quickTick ? colors.success : colors.line}`,
-                    borderRadius: 20, cursor: quickBusy ? 'default' : 'pointer', textAlign: 'center',
+                    borderRadius: 20, cursor: 'pointer', textAlign: 'center',
                     transition: 'background 0.2s, border-color 0.2s',
                   }}
                 >
@@ -1472,8 +1505,8 @@ export default function Home() {
                         <circle cx="12" cy="12" r="10" />
                         <path d="M8 12.5l2.5 2.5L16 9" />
                       </svg>
-                      <span style={{ fontSize: 16, fontWeight: 700, color: colors.success }}>Saved to Silo</span>
-                      <span style={{ fontSize: 13, color: colors.inkFaint }}>Tap to take the next one</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: colors.success }}>Got it</span>
+                      <span style={{ fontSize: 13, color: colors.inkFaint }}>Tap for the next one</span>
                     </>
                   ) : (
                     <>
@@ -1481,22 +1514,47 @@ export default function Home() {
                         <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                         <circle cx="12" cy="13" r="4" />
                       </svg>
-                      <span style={{ fontSize: 17, fontWeight: 700, color: colors.ink }}>{quickBusy ? 'Saving\u2026' : 'Take a photo'}</span>
-                      <span style={{ fontSize: 13, color: colors.inkFaint, maxWidth: 240, lineHeight: 1.5 }}>Snaps straight into the Silo. Add the name, box and details later.</span>
+                      <span style={{ fontSize: 17, fontWeight: 700, color: colors.ink }}>Take a photo</span>
+                      <span style={{ fontSize: 13, color: colors.inkFaint, maxWidth: 240, lineHeight: 1.5 }}>Snap, snap, snap - they save themselves. Add names and boxes later.</span>
                     </>
                   )}
-                  <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={quickBusy} onChange={quickCapture} />
+                  <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={quickCapture} />
                 </label>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
-                  <span style={{ fontSize: 13, color: colors.inkFaint, fontWeight: 600 }}>
-                    {quickCount === 0 ? 'Nothing captured yet' : `${quickCount} added this session`}
+                {total > 0 && (
+                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginTop: 14, paddingBottom: 4 }}>
+                    {recent.map((s) => (
+                      <div
+                        key={s.id}
+                        onClick={() => { if (s.status === 'error') retryQuickShot(s.id); }}
+                        style={{ position: 'relative', flex: '0 0 auto', width: 56, height: 56, borderRadius: 10, overflow: 'hidden', border: `2px solid ${s.status === 'error' ? colors.accent : s.status === 'saved' ? colors.success : colors.line}`, cursor: s.status === 'error' ? 'pointer' : 'default' }}
+                      >
+                        <img src={s.dataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {s.status !== 'saved' && (
+                          <div style={{ position: 'absolute', inset: 0, background: 'rgba(23,26,32,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>{s.status === 'error' ? 'RETRY' : '\u2026'}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+                  <span style={{ fontSize: 13, color: failed ? colors.accent : colors.inkFaint, fontWeight: 600 }}>
+                    {total === 0
+                      ? 'Nothing captured yet'
+                      : failed
+                        ? `${failed} didn\u2019t save - tap to retry`
+                        : saving
+                          ? `${saved}/${total} saved\u2026`
+                          : `${total} saved to Silo`}
                   </span>
                   <button
                     type="button"
                     onClick={() => setTab('inventory')}
-                    disabled={quickCount === 0}
-                    style={{ ...outlineBtn, width: 'auto', padding: '9px 16px', opacity: quickCount === 0 ? 0.5 : 1 }}
+                    disabled={total === 0}
+                    style={{ ...outlineBtn, width: 'auto', padding: '9px 16px', opacity: total === 0 ? 0.5 : 1 }}
                   >
                     Go to Silo
                   </button>
@@ -1505,7 +1563,8 @@ export default function Home() {
                   Each photo becomes an item in the Silo. Open one there any time to add more photos, a box, a category and notes.
                 </p>
               </div>
-            )}
+              );
+            })()}
 
             {logMode !== 'quick' && (
             <>
