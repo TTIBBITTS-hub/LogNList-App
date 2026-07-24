@@ -157,7 +157,22 @@ export default function Home() {
     }
   }
 
-  const [logMode, setLogMode] = useState('item'); // 'item' or 'box'
+  const [logMode, setLogMode] = useState('item'); // 'item', 'box' or 'quick'
+
+  // Quick Capture: snap a photo and it saves straight to the Silo with no other
+  // details. Camera is ready again for the next one; details get filled in later.
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickTick, setQuickTick] = useState(false);
+  const [quickCount, setQuickCount] = useState(0);
+
+  // Editable details on the open item (used to finish off Quick Capture items).
+  const [detailDraft, setDetailDraft] = useState({ name: '', category: '', box: '', notes: '' });
+  const [detailSaving, setDetailSaving] = useState(false);
+  const [detailSaved, setDetailSaved] = useState(false);
+  // startVoice expects a React-style setter (it passes an updater fn), so wrap
+  // each detail field so voice dictation and typing both work.
+  const draftSetter = (key) => (updater) =>
+    setDetailDraft((d) => ({ ...d, [key]: typeof updater === 'function' ? updater(d[key]) : updater }));
 
   // Search matches name, category, box and notes — same fields as the artifact.
   // A "file" is just a row with type 'file'. Real items are everything else.
@@ -238,6 +253,19 @@ export default function Home() {
   useEffect(() => {
     loadItems();
   }, []);
+
+  // Keep the editable detail fields in sync with whichever item is open.
+  useEffect(() => {
+    if (openItem) {
+      setDetailDraft({
+        name: openItem.name || '',
+        category: openItem.category || '',
+        box: openItem.box || '',
+        notes: openItem.notes || '',
+      });
+      setDetailSaved(false);
+    }
+  }, [openItem?.id]);
 
   // Open a specific item if the URL asks for it (e.g. /?item=<id> from a box page).
   useEffect(() => {
@@ -440,6 +468,60 @@ export default function Home() {
     setBox('');
     setNotes('');
     setBoxDescription('');
+  }
+
+  // Quick Capture: one photo straight into the Silo, no other details required.
+  async function quickCapture(e) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setQuickBusy(true);
+    setError(null);
+    try {
+      const dataUrl = await compressImage(file);
+      const res = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'item', name: '', category: '', box: '', notes: '', photos: [dataUrl] }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setQuickCount((n) => n + 1);
+      setQuickTick(true);
+      setTimeout(() => setQuickTick(false), 1200);
+      await loadItems();
+    } catch (err) {
+      setError('Quick capture failed: ' + err.message);
+    }
+    setQuickBusy(false);
+  }
+
+  // Save the editable details on the open item (finishes a Quick Capture item).
+  async function saveDetails() {
+    if (!openItem) return;
+    setDetailSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/items/' + openItem.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: detailDraft.name.trim(),
+          category: detailDraft.category.trim(),
+          box: detailDraft.box.trim(),
+          notes: detailDraft.notes.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setOpenItem(data.item);
+      setDetailSaved(true);
+      setTimeout(() => setDetailSaved(false), 1500);
+      await loadItems();
+    } catch (e) {
+      setError("Couldn't save details: " + e.message);
+    }
+    setDetailSaving(false);
   }
 
   async function submitLogBox() {
@@ -919,6 +1001,12 @@ export default function Home() {
   const bookBoxVideoRef = useRef(null);
   const [scanningBookBox, setScanningBookBox] = useState(false);
 
+  // Scan a printed box QR to set the location while logging a NEW single item ----
+  const logBoxVideoRef = useRef(null);
+  const [scanningLogBox, setScanningLogBox] = useState(false);
+  const [logBoxScanError, setLogBoxScanError] = useState(null);
+  const [logBoxManual, setLogBoxManual] = useState('');
+
   // Scan a printed box QR to SEE what's inside that box ----
   const viewBoxVideoRef = useRef(null);
   const [scanningBoxView, setScanningBoxView] = useState(false);
@@ -948,6 +1036,7 @@ export default function Home() {
     killVideoStream(videoRef);
     killVideoStream(boxVideoRef);
     killVideoStream(bookBoxVideoRef);
+    killVideoStream(logBoxVideoRef);
     killVideoStream(viewBoxVideoRef);
   }
 
@@ -1002,6 +1091,7 @@ export default function Home() {
       setScanningBoxItem(null);
       setBoxManual('');
       setOpenItem(data.item);
+      setDetailDraft((d) => ({ ...d, box: name }));
       setNotice('Filed into "' + name + '".');
       await loadItems();
     } catch (e) {
@@ -1045,6 +1135,38 @@ export default function Home() {
     if (scanningBookBox) { startBookBoxScan(); }
     return () => { stopBoxScan(); };
   }, [scanningBookBox]);
+
+  // Scan a box label to fill the location while logging a new single item.
+  async function startLogBoxScan() {
+    setLogBoxScanError(null);
+    stopAllScanners();
+    try {
+      const ZX = await loadZXing();
+      const hints = new Map();
+      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.QR_CODE]);
+      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZX.BrowserMultiFormatReader(hints);
+      boxScannerRef.current = reader;
+      await reader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        logBoxVideoRef.current,
+        (result) => {
+          if (!result) return;
+          const name = boxNameFromScan(result.getText());
+          if (!name) return; // not one of our labels, keep looking
+          stopBoxScan();
+          setBox(name);
+          setScanningLogBox(false);
+        }
+      );
+    } catch (e) {
+      setLogBoxScanError("Camera scanning isn't available here - type the box name below instead.");
+    }
+  }
+  useEffect(() => {
+    if (scanningLogBox) { startLogBoxScan(); }
+    return () => { stopBoxScan(); };
+  }, [scanningLogBox]);
 
   // Scan a box label to open a read-out of everything inside that box.
   async function startBoxViewScan() {
@@ -1314,14 +1436,15 @@ export default function Home() {
               {[
                 { key: 'item', label: 'Single Item' },
                 { key: 'box', label: 'Log a Box' },
+                { key: 'quick', label: 'Quick Capture' },
               ].map((m) => (
                 <button
                   key={m.key}
                   type="button"
                   onClick={() => { setLogMode(m.key); setError(null); }}
                   style={{
-                    flex: 1, padding: '10px 6px', borderRadius: 999, border: 'none', cursor: 'pointer',
-                    fontSize: 13.5, fontWeight: 600,
+                    flex: 1, padding: '10px 4px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                    fontSize: 12.5, fontWeight: 600,
                     background: logMode === m.key ? colors.ink : 'transparent',
                     color: logMode === m.key ? '#fff' : colors.inkFaint,
                   }}
@@ -1331,6 +1454,61 @@ export default function Home() {
               ))}
             </div>
 
+            {logMode === 'quick' && (
+              <div>
+                <label
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    gap: 12, width: '100%', aspectRatio: '4 / 3', maxHeight: 340,
+                    background: quickTick ? 'rgba(15,122,84,0.08)' : colors.bgAlt,
+                    border: `2px dashed ${quickTick ? colors.success : colors.line}`,
+                    borderRadius: 20, cursor: quickBusy ? 'default' : 'pointer', textAlign: 'center',
+                    transition: 'background 0.2s, border-color 0.2s',
+                  }}
+                >
+                  {quickTick ? (
+                    <>
+                      <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke={colors.success} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M8 12.5l2.5 2.5L16 9" />
+                      </svg>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: colors.success }}>Saved to Silo</span>
+                      <span style={{ fontSize: 13, color: colors.inkFaint }}>Tap to take the next one</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke={colors.inkFaint} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                      </svg>
+                      <span style={{ fontSize: 17, fontWeight: 700, color: colors.ink }}>{quickBusy ? 'Saving\u2026' : 'Take a photo'}</span>
+                      <span style={{ fontSize: 13, color: colors.inkFaint, maxWidth: 240, lineHeight: 1.5 }}>Snaps straight into the Silo. Add the name, box and details later.</span>
+                    </>
+                  )}
+                  <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={quickBusy} onChange={quickCapture} />
+                </label>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+                  <span style={{ fontSize: 13, color: colors.inkFaint, fontWeight: 600 }}>
+                    {quickCount === 0 ? 'Nothing captured yet' : `${quickCount} added this session`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setTab('inventory')}
+                    disabled={quickCount === 0}
+                    style={{ ...outlineBtn, width: 'auto', padding: '9px 16px', opacity: quickCount === 0 ? 0.5 : 1 }}
+                  >
+                    Go to Silo
+                  </button>
+                </div>
+                <p style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: 16, lineHeight: 1.5 }}>
+                  Each photo becomes an item in the Silo. Open one there any time to add more photos, a box, a category and notes.
+                </p>
+              </div>
+            )}
+
+            {logMode !== 'quick' && (
+            <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 6 }}>
               {[0, 1, 2].map((slot) => (
                 <div key={slot} style={{ position: 'relative', aspectRatio: '1' }}>
@@ -1378,6 +1556,19 @@ export default function Home() {
                     <MicButton active={listening === 'box'} onClick={() => startVoice('box', setBox)} />
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => { setLogBoxScanError(null); setLogBoxManual(''); setScanningLogBox(true); }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '11px 14px', marginBottom: 10, background: '#fff', color: colors.ink, border: `1.5px solid ${colors.line}`, borderRadius: 12, fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <path d="M14 14h3M14 17v3M17 17h3v3M20 14v.01" />
+                  </svg>
+                  Scan a box label to set the location
+                </button>
                 <div style={fieldWrap}>
                   <textarea placeholder="Condition / notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...micInputStyle, minHeight: 64, resize: 'vertical', display: 'block' }} />
                   <MicButton textarea active={listening === 'notes'} onClick={() => startVoice('notes', setNotes)} />
@@ -1440,6 +1631,8 @@ export default function Home() {
                 </p>
               </>
             )}
+            </>
+            )}
 
             <datalist id="box-suggestions">
               {recentBoxes.map((b) => <option key={b} value={b} />)}
@@ -1485,7 +1678,7 @@ export default function Home() {
                         ? limitWords(item.notes || 'Mixed box', 6)
                         : limitWords(item.name || 'Unidentified item', 6)}
                     </div>
-                    <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>BOX: {item.box}</div>
+                    <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>BOX: {(item.box || '').trim() || 'not filed yet'}</div>
                     <span style={{ display: 'inline-block', marginTop: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '3px 8px', borderRadius: 999, background: sc.bg, color: sc.text }}>
                       {isBox ? 'MIXED BOX' : item.status?.toUpperCase()}
                     </span>
@@ -2061,6 +2254,32 @@ export default function Home() {
         </div>
       )}
 
+      {scanningLogBox && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 160 }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 0 }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Scan the box label</span>
+              <button type="button" onClick={() => { stopBoxScan(); setScanningLogBox(false); }} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <p style={{ color: colors.inkSoft, fontSize: 13.5, margin: '0 0 12px' }}>
+                Point the camera at the printed QR on the box. That fills in the location for this item &mdash; no typing.
+              </p>
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
+                <video ref={logBoxVideoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', inset: '20%', border: '2px solid rgba(124,203,43,0.9)', borderRadius: 10 }} />
+              </div>
+              {logBoxScanError && <p style={{ color: colors.accent, fontSize: 13, margin: '0 0 10px' }}>{logBoxScanError}</p>}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input type="text" placeholder="Or type the box name" value={logBoxManual} onChange={(e) => setLogBoxManual(e.target.value)} style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+                <button type="button" onClick={() => { if (logBoxManual.trim()) { stopBoxScan(); setBox(logBoxManual.trim()); setLogBoxManual(''); setScanningLogBox(false); } }} disabled={!logBoxManual.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: logBoxManual.trim() ? 1 : 0.5 }}>Set</button>
+              </div>
+              <button type="button" onClick={() => { stopBoxScan(); setScanningLogBox(false); }} style={{ ...outlineBtn, width: '100%' }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {scanningBoxView && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 150 }}>
           <div style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 0 }}>
@@ -2229,9 +2448,38 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 16 }}>
-                  Box: {openItem.box} &middot; {openItem.category || 'uncategorised'}
-                </p>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint, marginBottom: 8 }}>DETAILS</div>
+                  <div style={fieldWrap}>
+                    <input placeholder="What is it?" value={detailDraft.name} onChange={(e) => setDetailDraft((d) => ({ ...d, name: e.target.value }))} style={micInputStyle} />
+                    <MicButton active={listening === 'dname'} onClick={() => startVoice('dname', draftSetter('name'))} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ ...fieldWrap, flex: 1 }}>
+                      <input placeholder="Category" value={detailDraft.category} onChange={(e) => setDetailDraft((d) => ({ ...d, category: e.target.value }))} style={micInputStyle} />
+                      <MicButton active={listening === 'dcat'} onClick={() => startVoice('dcat', draftSetter('category'))} />
+                    </div>
+                    <div style={{ ...fieldWrap, flex: 1 }}>
+                      <input placeholder="Box / location" value={detailDraft.box} onChange={(e) => setDetailDraft((d) => ({ ...d, box: e.target.value }))} style={micInputStyle} list="box-suggestions-detail" />
+                      <MicButton active={listening === 'dbox'} onClick={() => startVoice('dbox', draftSetter('box'))} />
+                    </div>
+                  </div>
+                  <div style={fieldWrap}>
+                    <textarea placeholder="Condition / notes" value={detailDraft.notes} onChange={(e) => setDetailDraft((d) => ({ ...d, notes: e.target.value }))} style={{ ...micInputStyle, minHeight: 64, resize: 'vertical', display: 'block' }} />
+                    <MicButton textarea active={listening === 'dnotes'} onClick={() => startVoice('dnotes', draftSetter('notes'))} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={saveDetails}
+                    disabled={detailSaving}
+                    style={{ ...outlineBtn, width: '100%', marginTop: 2, opacity: detailSaving ? 0.6 : 1, color: detailSaved ? colors.success : colors.ink, borderColor: detailSaved ? colors.success : colors.line }}
+                  >
+                    {detailSaving ? 'Saving\u2026' : detailSaved ? 'Saved \u2713' : 'Save details'}
+                  </button>
+                  <datalist id="box-suggestions-detail">
+                    {recentBoxes.map((b) => <option key={b} value={b} />)}
+                  </datalist>
+                </div>
               )}
 
               <button
