@@ -2848,6 +2848,17 @@ export default function Home() {
 
               <button
                 type="button"
+                onClick={() => { setOpenItem(null); setNotice(null); setTab('inventory'); }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: 12, marginBottom: 16, background: '#fff', color: colors.ink, border: `1.5px solid ${colors.line}`, borderRadius: 999, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+                Go to Silo
+              </button>
+
+              <button
+                type="button"
                 onClick={() => { setBoxScanError(null); setBoxManual(''); setScanningBoxItem(openItem); }}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: 13, marginBottom: 16, background: colors.brand, color: colors.ink, border: 'none', borderRadius: 999, fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}
               >
