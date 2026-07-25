@@ -44,6 +44,7 @@ export default function LabelsPage() {
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
   const [printOnly, setPrintOnly] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   useEffect(() => {
     load();
@@ -95,6 +96,65 @@ export default function LabelsPage() {
   function printLabel(name) {
     setPrintOnly(name);
     setTimeout(() => { window.print(); setPrintOnly(null); }, 60);
+  }
+
+  // Build a tidy PNG of a single label (QR + name) and hand it to the device's
+  // share sheet - so you can email/message a label to yourself without printing.
+  // On a laptop with no share sheet, it downloads the image to attach instead.
+  async function shareLabel(name) {
+    const qrData = qrMap[name];
+    if (!qrData) return;
+    setNotice(null);
+    setError(null);
+    try {
+      const W = 620;
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = W + 150;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#98999D';
+      ctx.font = 'bold 24px system-ui, -apple-system, sans-serif';
+      ctx.fillText('LOG\u0026LIST', canvas.width / 2, 48);
+
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = qrData; });
+      const qrSize = 480;
+      const qx = (canvas.width - qrSize) / 2;
+      const qy = 74;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, qx, qy, qrSize, qrSize);
+
+      ctx.fillStyle = '#171A20';
+      ctx.font = 'bold 36px system-ui, -apple-system, sans-serif';
+      ctx.fillText(name, canvas.width / 2, qy + qrSize + 64);
+
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+      const safe = (name.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'box');
+      const file = new File([blob], 'LogNList-' + safe + '.png', { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Box label: ' + name,
+          text: 'Log\u0026List label for "' + name + '". Open the image and scan the QR to file items into this box.',
+        });
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        setNotice('Saved the "' + name + '" label as an image - attach it to an email, or open it and scan it.');
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // user closed the share sheet - not an error
+      setError('Could not share that label: ' + e.message);
+    }
   }
 
   // All box names: created boxes first, plus any names already used by items.
@@ -191,6 +251,7 @@ export default function LabelsPage() {
 
         {!loaded && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40 }}>Loading...</p>}
         {error && <p style={{ color: colors.accent, fontSize: 14, marginTop: 4, marginBottom: 16 }}>{error}</p>}
+        {notice && <p style={{ color: '#0F7A54', fontSize: 14, marginTop: 4, marginBottom: 16, fontWeight: 600 }}>{notice}</p>}
 
         {loaded && boxNames.length === 0 && (
           <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 20, fontSize: 15, lineHeight: 1.5, padding: '0 20px' }}>
@@ -236,14 +297,29 @@ export default function LabelsPage() {
                   <div style={{ fontSize: 12, color: colors.inkFaint, marginTop: 3 }}>
                     {countFor(name)} {countFor(name) === 1 ? 'item' : 'items'}
                   </div>
-                  <button
-                    type="button"
-                    className="noprint"
-                    onClick={() => printLabel(name)}
-                    style={{ marginTop: 12, background: 'transparent', border: '1.5px solid ' + colors.line, color: colors.ink, borderRadius: 999, padding: '7px 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    Print this label
-                  </button>
+                  <div className="noprint" style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button
+                      type="button"
+                      onClick={() => printLabel(name)}
+                      style={{ background: 'transparent', border: '1.5px solid ' + colors.line, color: colors.ink, borderRadius: 999, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Print
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => shareLabel(name)}
+                      disabled={!qrMap[name]}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, background: colors.ink, border: '1.5px solid ' + colors.ink, color: '#fff', borderRadius: 999, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: qrMap[name] ? 1 : 0.5 }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="18" cy="5" r="3" />
+                        <circle cx="6" cy="12" r="3" />
+                        <circle cx="18" cy="19" r="3" />
+                        <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+                      </svg>
+                      Share
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
