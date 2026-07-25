@@ -761,7 +761,7 @@ export default function Home() {
   }
 
   // ── Fileit ──────────────────────────────────────────────
-  async function createFile() {
+  async function createFile(withQr) {
     const nm = newFileName.trim();
     if (!nm) return;
     const res = await fetch('/api/items', {
@@ -775,6 +775,7 @@ export default function Home() {
     if (data.item?.id) setSelectedFileId(data.item.id);
     setNotice(`File "${nm}" created.`);
     await loadItems();
+    if (withQr && data.item) openFileQr(data.item);
   }
 
   async function renameFile(file, nm) {
@@ -884,6 +885,17 @@ export default function Home() {
       s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
       s.onload = () => resolve(window.ZXing);
       s.onerror = () => reject(new Error('scanner load failed'));
+      document.head.appendChild(s);
+    });
+  }
+  // QR generator (same library the Labels page uses) for file QR codes.
+  function loadQR() {
+    return new Promise((resolve, reject) => {
+      if (typeof window !== 'undefined' && typeof window.qrcode === 'function') return resolve(window.qrcode);
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+      s.onload = () => (typeof window.qrcode === 'function' ? resolve(window.qrcode) : reject(new Error('QR library empty')));
+      s.onerror = () => reject(new Error('QR library failed to load'));
       document.head.appendChild(s);
     });
   }
@@ -1036,6 +1048,14 @@ export default function Home() {
   const [logBoxScanError, setLogBoxScanError] = useState(null);
   const [logBoxManual, setLogBoxManual] = useState('');
 
+  // Scan a printed FILE QR to move the open item into that file ----
+  const fileVideoRef = useRef(null);
+  const [scanningFileItem, setScanningFileItem] = useState(null);
+  const [fileScanError, setFileScanError] = useState(null);
+  // Show a file's QR code (create -> QR, or the QR button on a file) ----
+  const [fileQrFor, setFileQrFor] = useState(null);   // the file whose QR is shown
+  const [fileQrData, setFileQrData] = useState(null); // its QR image data URL
+
   // Scan a printed box QR to SEE what's inside that box ----
   const viewBoxVideoRef = useRef(null);
   const [scanningBoxView, setScanningBoxView] = useState(false);
@@ -1066,6 +1086,7 @@ export default function Home() {
     killVideoStream(boxVideoRef);
     killVideoStream(bookBoxVideoRef);
     killVideoStream(logBoxVideoRef);
+    killVideoStream(fileVideoRef);
     killVideoStream(viewBoxVideoRef);
   }
 
@@ -1196,6 +1217,128 @@ export default function Home() {
     if (scanningLogBox) { startLogBoxScan(); }
     return () => { stopBoxScan(); };
   }, [scanningLogBox]);
+
+  // ---- Files as QR: scan a file's QR to move the open item into that file ----
+  function fileIdFromScan(text) {
+    try {
+      const u = new URL(text);
+      const m = u.pathname.match(/\/file\/(.+)$/);
+      if (m) return decodeURIComponent(m[1]);
+    } catch (e) {}
+    return null;
+  }
+  async function startFileScan() {
+    setFileScanError(null);
+    stopAllScanners();
+    try {
+      const ZX = await loadZXing();
+      const hints = new Map();
+      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.QR_CODE]);
+      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+      const reader = new ZX.BrowserMultiFormatReader(hints);
+      boxScannerRef.current = reader;
+      await reader.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
+        fileVideoRef.current,
+        (result) => {
+          if (!result) return;
+          const id = fileIdFromScan(result.getText());
+          if (!id) return; // not one of our file labels, keep looking
+          stopBoxScan();
+          moveScannedToFile(id);
+        }
+      );
+    } catch (e) {
+      setFileScanError("Camera scanning isn't available here - pick a file below instead.");
+    }
+  }
+  async function moveScannedToFile(fileId) {
+    const item = scanningFileItem;
+    if (!item || !fileId) return;
+    const target = files.find((f) => String(f.id) === String(fileId));
+    try {
+      const res = await fetch('/api/items/' + item.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: fileId }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setScanningFileItem(null);
+      setOpenItem(data.item);
+      setNotice('Moved into "' + (target ? target.name : 'the file') + '".');
+      await loadItems();
+    } catch (e) {
+      setFileScanError('Could not move it: ' + e.message);
+    }
+  }
+  useEffect(() => {
+    if (scanningFileItem) { startFileScan(); }
+    return () => { stopBoxScan(); };
+  }, [scanningFileItem]);
+
+  // Build a QR image for a file and open the QR panel.
+  async function openFileQr(file) {
+    if (!file) return;
+    setFileQrFor(file);
+    setFileQrData(null);
+    try {
+      const qrcode = await loadQR();
+      const url = window.location.origin + '/file/' + encodeURIComponent(String(file.id));
+      const qr = qrcode(0, 'M');
+      qr.addData(url);
+      qr.make();
+      setFileQrData(qr.createDataURL(8, 16));
+    } catch (e) {
+      setError('Could not generate that QR: ' + e.message);
+    }
+  }
+  // Share/download a file's QR as a tidy PNG (same idea as box labels).
+  async function shareFileQr() {
+    const file = fileQrFor;
+    if (!file || !fileQrData) return;
+    try {
+      const W = 620;
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = W + 150;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = colors.inkFaint;
+      ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
+      ctx.fillText('LOG\u0026LIST \u00b7 FILE', canvas.width / 2, 46);
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = fileQrData; });
+      const qrSize = 480;
+      const qx = (canvas.width - qrSize) / 2;
+      const qy = 74;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, qx, qy, qrSize, qrSize);
+      ctx.fillStyle = colors.ink;
+      ctx.font = 'bold 36px system-ui, -apple-system, sans-serif';
+      ctx.fillText(file.name || 'File', canvas.width / 2, qy + qrSize + 64);
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+      const safe = ((file.name || 'file').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'file');
+      const f = new File([blob], 'LogNList-file-' + safe + '.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) {
+        await navigator.share({ files: [f], title: 'File: ' + (file.name || ''), text: 'Log\u0026List file "' + (file.name || '') + '". Open an item and scan this QR to move it into this file.' });
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = f.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        setNotice('Saved the "' + (file.name || 'file') + '" QR as an image.');
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      setError('Could not share that QR: ' + e.message);
+    }
+  }
 
   // Scan a box label to open a read-out of everything inside that box.
   async function startBoxViewScan() {
@@ -1864,7 +2007,16 @@ export default function Home() {
           };
           return (
             <div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>File-it</h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>File-it</h2>
+                <button
+                  type="button"
+                  onClick={() => { setShowNewFile(true); setNewFileName(''); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: colors.ink, color: '#fff', border: 'none', borderRadius: 999, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> New file
+                </button>
+              </div>
               <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>
                 The <strong>Silo</strong> holds everything you&rsquo;ve logged. Hit <strong>Move</strong> on an item to file it into a folder. Drag folders to reorder.
               </p>
@@ -1882,18 +2034,29 @@ export default function Home() {
               </div>
 
               {showNewFile && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <div style={{ marginTop: 14 }}>
                   <input
                     type="text"
                     autoFocus
                     placeholder="Name the file &mdash; e.g. Books, Sold, Kids' art"
                     value={newFileName}
                     onChange={(e) => setNewFileName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') createFile(); if (e.key === 'Escape') { setShowNewFile(false); setNewFileName(''); } }}
-                    style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') createFile(false); if (e.key === 'Escape') { setShowNewFile(false); setNewFileName(''); } }}
+                    style={{ ...inputStyle, marginBottom: 8, width: '100%', boxSizing: 'border-box' }}
                   />
-                  <button type="button" onClick={createFile} disabled={!newFileName.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: newFileName.trim() ? 1 : 0.5 }}>Add</button>
-                  <button type="button" onClick={() => { setShowNewFile(false); setNewFileName(''); }} style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 16px' }}>Cancel</button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" onClick={() => createFile(false)} disabled={!newFileName.trim()} style={{ ...outlineBtn, flex: 1, opacity: newFileName.trim() ? 1 : 0.5 }}>Add</button>
+                    <button type="button" onClick={() => createFile(true)} disabled={!newFileName.trim()} style={{ ...primaryBtn, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: newFileName.trim() ? 1 : 0.5 }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1" />
+                        <rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" />
+                        <path d="M14 14h3M14 17v3M17 17h3v3M20 14v.01" />
+                      </svg>
+                      Add + QR
+                    </button>
+                    <button type="button" onClick={() => { setShowNewFile(false); setNewFileName(''); }} style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 16px' }}>Cancel</button>
+                  </div>
                 </div>
               )}
 
@@ -1926,6 +2089,7 @@ export default function Home() {
                           </>);
                         })()}
                         <button type="button" onClick={() => { setEditingName(true); setRenameValue(selectedFile.name || ''); }} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>Rename file</button>
+                        <button type="button" onClick={() => openFileQr(selectedFile)} style={{ background: 'none', border: 'none', color: colors.inkSoft, fontSize: 12.5, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline', textUnderlineOffset: 2 }}>File QR</button>
                       </div>
                       <div style={{ textAlign: 'center', marginTop: 18 }}>
                         <button type="button" onClick={() => { if (confirm(`Delete the "${selectedFile.name}" file? The items in it are kept, just moved back to the Silo.`)) deleteFile(selectedFile); }} style={{ background: 'none', border: `1px solid ${colors.line}`, color: colors.inkFaint, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '6px 14px', borderRadius: 999 }}>Delete file</button>
@@ -2341,6 +2505,74 @@ export default function Home() {
         </div>
       )}
 
+      {scanningFileItem && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 160 }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 0 }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Scan a file QR</span>
+              <button type="button" onClick={() => { stopBoxScan(); setScanningFileItem(null); }} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <p style={{ color: colors.inkSoft, fontSize: 13.5, margin: '0 0 12px' }}>
+                Point the camera at a file&rsquo;s QR. It moves <strong>{scanningFileItem.name || 'this item'}</strong> into that file.
+              </p>
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
+                <video ref={fileVideoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', inset: '20%', border: '2px solid rgba(124,203,43,0.9)', borderRadius: 10 }} />
+              </div>
+              {fileScanError && <p style={{ color: colors.accent, fontSize: 13, margin: '0 0 10px' }}>{fileScanError}</p>}
+              {files.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint, marginBottom: 6 }}>OR PICK A FILE</div>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => { if (e.target.value) { stopBoxScan(); moveScannedToFile(e.target.value); } }}
+                    style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${colors.line}`, borderRadius: 10, background: colors.bgAlt, fontSize: 14, color: colors.ink, cursor: 'pointer', boxSizing: 'border-box' }}
+                  >
+                    <option value="">Choose a file&hellip;</option>
+                    {files.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <button type="button" onClick={() => { stopBoxScan(); setScanningFileItem(null); }} style={{ ...outlineBtn, width: '100%' }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fileQrFor && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 170 }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: 420, borderRadius: '20px 20px 0 0', padding: 0 }}>
+            <div style={{ background: colors.ink, padding: '14px 16px', borderRadius: '20px 20px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>File QR</span>
+              <button type="button" onClick={() => { setFileQrFor(null); setFileQrData(null); }} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ padding: 24, textAlign: 'center' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: colors.inkFaint, marginBottom: 12 }}>Log&amp;List</div>
+              {fileQrData ? (
+                <img src={fileQrData} alt="" style={{ width: 220, height: 220, imageRendering: 'pixelated' }} />
+              ) : (
+                <div style={{ width: 220, height: 220, margin: '0 auto', background: colors.bgAlt, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.inkFaint, fontSize: 13 }}>Generating&hellip;</div>
+              )}
+              <div style={{ fontSize: 18, fontWeight: 700, color: colors.ink, marginTop: 14, wordBreak: 'break-word' }}>{fileQrFor.name}</div>
+              <p style={{ fontSize: 12.5, color: colors.inkFaint, margin: '8px 0 18px', lineHeight: 1.5 }}>
+                Open an item and tap <strong>Scan a file QR to move it here</strong> to drop things into this file.
+              </p>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" onClick={shareFileQr} disabled={!fileQrData} style={{ ...primaryBtn, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: fileQrData ? 1 : 0.5 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                    <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+                  </svg>
+                  Share
+                </button>
+                <button type="button" onClick={() => { setFileQrFor(null); setFileQrData(null); }} style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 20px' }}>Done</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {scanningBoxView && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 150 }}>
           <div style={{ background: '#fff', width: '100%', maxWidth: 480, borderRadius: '20px 20px 0 0', padding: 0 }}>
@@ -2576,7 +2808,8 @@ export default function Home() {
               </button>
 
               {openItem.type !== 'book' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>FILE</span>
                 <select
                   value={openItem.file_id || ''}
@@ -2589,6 +2822,20 @@ export default function Home() {
                   ))}
                 </select>
               </div>
+              <button
+                type="button"
+                onClick={() => { setFileScanError(null); setScanningFileItem(openItem); }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: 11, marginBottom: 16, background: '#fff', color: colors.ink, border: `1.5px solid ${colors.line}`, borderRadius: 999, fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <path d="M14 14h3M14 17v3M17 17h3v3M20 14v.01" />
+                </svg>
+                Scan a file QR to move it here
+              </button>
+              </>
               )}
 
               {openItem.type !== 'box' && openItem.type !== 'book' && (
