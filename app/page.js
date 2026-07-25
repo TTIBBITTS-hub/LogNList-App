@@ -1055,6 +1055,7 @@ export default function Home() {
   // Show a file's QR code (create -> QR, or the QR button on a file) ----
   const [fileQrFor, setFileQrFor] = useState(null);   // the file whose QR is shown
   const [fileQrData, setFileQrData] = useState(null); // its QR image data URL
+  const [fileLinkInput, setFileLinkInput] = useState(''); // box label to link a file to
 
   // Scan a printed box QR to SEE what's inside that box ----
   const viewBoxVideoRef = useRef(null);
@@ -1131,10 +1132,14 @@ export default function Home() {
     const item = scanningBoxItem;
     if (!item || !name) return;
     try {
+      // If a file is linked to this box label, drop the item into that file too.
+      const linked = files.find((f) => (f.box || '').trim().toLowerCase() === name.trim().toLowerCase());
+      const patch = { box: name };
+      if (linked) patch.file_id = linked.id;
       const res = await fetch('/api/items/' + item.id, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ box: name }),
+        body: JSON.stringify(patch),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -1142,7 +1147,7 @@ export default function Home() {
       setBoxManual('');
       setOpenItem(data.item);
       setDetailDraft((d) => ({ ...d, box: name }));
-      setNotice('Filed into "' + name + '".');
+      setNotice(linked ? 'Filed into "' + name + '" and moved to the "' + linked.name + '" file.' : 'Filed into "' + name + '".');
       await loadItems();
     } catch (e) {
       setBoxScanError('Could not file it: ' + e.message);
@@ -1282,6 +1287,7 @@ export default function Home() {
     if (!file) return;
     setFileQrFor(file);
     setFileQrData(null);
+    setFileLinkInput(file.box || '');
     try {
       const qrcode = await loadQR();
       const url = window.location.origin + '/file/' + encodeURIComponent(String(file.id));
@@ -1291,6 +1297,28 @@ export default function Home() {
       setFileQrData(qr.createDataURL(8, 16));
     } catch (e) {
       setError('Could not generate that QR: ' + e.message);
+    }
+  }
+  // Link a file to an existing box label (stored on the file's box field). After
+  // this, scanning that box's QR from an item also files the item into this file.
+  async function linkFileToBox(boxName) {
+    const file = fileQrFor;
+    if (!file) return;
+    const nm = (boxName || '').trim();
+    try {
+      const res = await fetch('/api/items/' + file.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ box: nm }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setFileQrFor(data.item);
+      setFileLinkInput(nm);
+      setNotice(nm ? 'Linked "' + (file.name || 'file') + '" to the "' + nm + '" label.' : 'Unlinked "' + (file.name || 'file') + '".');
+      await loadItems();
+    } catch (e) {
+      setError('Could not link that: ' + e.message);
     }
   }
   // Share/download a file's QR as a tidy PNG (same idea as box labels).
@@ -2567,6 +2595,31 @@ export default function Home() {
                   Share
                 </button>
                 <button type="button" onClick={() => { setFileQrFor(null); setFileQrData(null); }} style={{ ...outlineBtn, flex: '0 0 auto', width: 'auto', padding: '0 20px' }}>Done</button>
+              </div>
+
+              <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${colors.line}`, textAlign: 'left' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint, marginBottom: 8 }}>OR LINK AN EXISTING BOX LABEL</div>
+                {(fileQrFor.box || '').trim() ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: colors.bgAlt, borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: colors.ink }}>
+                      Linked to <span style={{ color: colors.success }}>{fileQrFor.box}</span>
+                    </div>
+                    <button type="button" onClick={() => linkFileToBox('')} style={{ background: 'none', border: `1px solid ${colors.line}`, color: colors.inkFaint, fontSize: 12, fontWeight: 600, borderRadius: 999, padding: '5px 12px', cursor: 'pointer' }}>Unlink</button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input type="text" placeholder="Box label name, e.g. Spices cupboard" value={fileLinkInput} onChange={(e) => setFileLinkInput(e.target.value)} list="box-suggestions-file" style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+                      <button type="button" onClick={() => linkFileToBox(fileLinkInput)} disabled={!fileLinkInput.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: fileLinkInput.trim() ? 1 : 0.5 }}>Link</button>
+                    </div>
+                    <p style={{ fontSize: 12, color: colors.inkFaint, margin: '8px 0 0', lineHeight: 1.5 }}>
+                      Scanning that box&rsquo;s label from an item will file it into this file too &mdash; no new QR needed.
+                    </p>
+                    <datalist id="box-suggestions-file">
+                      {recentBoxes.map((b) => <option key={b} value={b} />)}
+                    </datalist>
+                  </>
+                )}
               </div>
             </div>
           </div>
