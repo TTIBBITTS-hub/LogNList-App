@@ -168,7 +168,6 @@ export default function Home() {
   // Editable details on the open item (used to finish off Quick Capture items).
   const [detailDraft, setDetailDraft] = useState({ name: '', category: '', box: '', notes: '' });
   const [detailSaving, setDetailSaving] = useState(false);
-  const [detailSaved, setDetailSaved] = useState(false);
   // startVoice expects a React-style setter (it passes an updater fn), so wrap
   // each detail field so voice dictation and typing both work.
   const draftSetter = (key) => (updater) =>
@@ -263,7 +262,6 @@ export default function Home() {
         box: openItem.box || '',
         notes: openItem.notes || '',
       });
-      setDetailSaved(false);
     }
   }, [openItem?.id]);
 
@@ -542,8 +540,12 @@ export default function Home() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setOpenItem(data.item);
-      setDetailSaved(true);
-      setTimeout(() => setDetailSaved(false), 1500);
+      setDetailDraft({
+        name: data.item.name || '',
+        category: data.item.category || '',
+        box: data.item.box || '',
+        notes: data.item.notes || '',
+      });
       await loadItems();
     } catch (e) {
       setError("Couldn't save details: " + e.message);
@@ -2527,14 +2529,32 @@ export default function Home() {
                     <textarea placeholder="Condition / notes" value={detailDraft.notes} onChange={(e) => setDetailDraft((d) => ({ ...d, notes: e.target.value }))} style={{ ...micInputStyle, minHeight: 64, resize: 'vertical', display: 'block' }} />
                     <MicButton textarea active={listening === 'dnotes'} onClick={() => startVoice('dnotes', draftSetter('notes'))} />
                   </div>
-                  <button
-                    type="button"
-                    onClick={saveDetails}
-                    disabled={detailSaving}
-                    style={{ ...outlineBtn, width: '100%', marginTop: 2, opacity: detailSaving ? 0.6 : 1, color: detailSaved ? colors.success : colors.ink, borderColor: detailSaved ? colors.success : colors.line }}
-                  >
-                    {detailSaving ? 'Saving\u2026' : detailSaved ? 'Saved \u2713' : 'Save details'}
-                  </button>
+                  {(() => {
+                    const s = {
+                      name: (openItem.name || '').trim(),
+                      category: (openItem.category || '').trim(),
+                      box: (openItem.box || '').trim(),
+                      notes: (openItem.notes || '').trim(),
+                    };
+                    const dirty =
+                      detailDraft.name.trim() !== s.name ||
+                      detailDraft.category.trim() !== s.category ||
+                      detailDraft.box.trim() !== s.box ||
+                      detailDraft.notes.trim() !== s.notes;
+                    const hasContent = !!(s.name || s.category || s.box || s.notes);
+                    const showSaved = !detailSaving && !dirty && hasContent;
+                    const inactive = detailSaving || !dirty;
+                    return (
+                      <button
+                        type="button"
+                        onClick={saveDetails}
+                        disabled={inactive}
+                        style={{ ...outlineBtn, width: '100%', marginTop: 2, cursor: inactive ? 'default' : 'pointer', opacity: detailSaving ? 0.6 : 1, color: showSaved ? colors.success : colors.ink, borderColor: showSaved ? colors.success : colors.line }}
+                      >
+                        {detailSaving ? 'Saving\u2026' : showSaved ? 'Saved \u2713' : 'Save details'}
+                      </button>
+                    );
+                  })()}
                   <datalist id="box-suggestions-detail">
                     {recentBoxes.map((b) => <option key={b} value={b} />)}
                   </datalist>
