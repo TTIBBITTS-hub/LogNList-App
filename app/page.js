@@ -242,6 +242,7 @@ export default function Home() {
   const [pickedItemId, setPickedItemId] = useState(null);
   const [movingItem, setMovingItem] = useState(null);   // item shown in the "move to folder" sheet
   const [sheetNewName, setSheetNewName] = useState('');
+  const [boxesList, setBoxesList] = useState([]);        // box labels made in the Labels tab
   const [selectMode, setSelectMode] = useState(false);   // Silo multi-select mode
   const [selectedIds, setSelectedIds] = useState([]);    // ids checked while selectMode is on
   const [bulkSheetOpen, setBulkSheetOpen] = useState(false); // "move to folder" sheet for the selection
@@ -268,6 +269,7 @@ export default function Home() {
 
   useEffect(() => {
     loadItems();
+    loadBoxes();
   }, []);
 
   // Keep the editable detail fields in sync with whichever item is open.
@@ -1588,6 +1590,39 @@ export default function Home() {
     const data = await res.json();
     setOpenItem(data.item);
     await loadItems();
+  }
+
+  async function loadBoxes() {
+    try {
+      const res = await fetch('/api/boxes');
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setBoxesList(data.boxes || []);
+    } catch (e) {
+      // Non-critical - the manual/scan box entry still works without this list.
+    }
+  }
+
+  // Pick an already-printed box label straight from a dropdown, no scanning needed.
+  async function assignBox(item, name) {
+    try {
+      const linked = files.find((f) => (f.box || '').trim().toLowerCase() === (name || '').trim().toLowerCase());
+      const patch = { box: name || '' };
+      if (name && linked) patch.file_id = linked.id;
+      const res = await fetch(`/api/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setOpenItem(data.item);
+      setDetailDraft((d) => ({ ...d, box: data.item.box || '' }));
+      mergeItemLocal(data.item);
+      setNotice(name ? (linked ? 'Filed into "' + name + '" and moved to the "' + linked.name + '" file.' : 'Filed into "' + name + '".') : 'Taken out of its box.');
+    } catch (e) {
+      setError('Could not assign that box: ' + e.message);
+    }
   }
 
   const statusColors = {
@@ -3047,6 +3082,22 @@ export default function Home() {
                 Go to Silo
               </button>
 
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', color: colors.inkFaint }}>BOX</span>
+                <select
+                  value={openItem.box || ''}
+                  onChange={(e) => assignBox(openItem, e.target.value)}
+                  style={{ flex: 1, padding: '10px 12px', border: `1.5px solid ${colors.line}`, borderRadius: 10, background: colors.bgAlt, fontSize: 14, color: colors.ink, cursor: 'pointer', boxSizing: 'border-box' }}
+                >
+                  <option value="">&mdash; Not filed &mdash;</option>
+                  {boxesList.map((b) => (
+                    <option key={b.id} value={b.name || b.code}>{b.name || b.code}</option>
+                  ))}
+                  {openItem.box && !boxesList.some((b) => (b.name || b.code) === openItem.box) && (
+                    <option value={openItem.box}>{openItem.box}</option>
+                  )}
+                </select>
+              </div>
               <button
                 type="button"
                 onClick={() => { setBoxScanError(null); setBoxManual(''); setScanningBoxItem(openItem); }}
