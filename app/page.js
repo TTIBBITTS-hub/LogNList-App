@@ -316,6 +316,14 @@ export default function Home() {
     setLoaded(true);
   }
 
+  // Patch a single already-known item into local state instead of re-fetching
+  // the whole inventory (which re-downloads every item's photos and gets
+  // slow once the Silo has a lot of items in it).
+  function mergeItemLocal(updated) {
+    if (!updated || updated.id == null) return;
+    setItems((prev) => prev.map((i) => (String(i.id) === String(updated.id) ? updated : i)));
+  }
+
   async function handlePhotoChange(e, slot) {
     const file = e.target.files[0];
     if (!file) return;
@@ -560,7 +568,7 @@ export default function Home() {
         box: data.item.box || '',
         notes: data.item.notes || '',
       });
-      await loadItems();
+      mergeItemLocal(data.item);
     } catch (e) {
       setError("Couldn't save details: " + e.message);
     }
@@ -651,7 +659,7 @@ export default function Home() {
       setOpenItem(patched.item);
       setDetailDraft((d) => ({ ...d, notes: patched.item?.notes || '' }));
       setRevalueNote('');
-      await loadItems();
+      mergeItemLocal(patched.item);
     } catch (e) {
       setError('Valuation failed: ' + e.message);
     }
@@ -717,7 +725,7 @@ export default function Home() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setOpenItem(data.item);
-      await loadItems();
+      mergeItemLocal(data.item);
 
       const photoCount = downloadItemPhotos(data.item);
       const text = `${data.item.listing.title || ''}\n\nPrice: $${price}\n\n${data.item.listing.description || ''}`;
@@ -2989,13 +2997,30 @@ export default function Home() {
                   )}
 
                   <div style={{ marginTop: 12 }}>
-                    <textarea
-                      placeholder="Value seem wrong? Add more details and press Re-Value"
-                      value={revalueNote}
-                      onChange={(e) => setRevalueNote(e.target.value)}
-                      disabled={valuationLoading}
-                      style={{ ...micInputStyle, minHeight: 56, resize: 'vertical', display: 'block', marginBottom: 8 }}
-                    />
+                    <div style={{ position: 'relative', marginBottom: 8 }}>
+                      <textarea
+                        placeholder="Value seem wrong? Add details here, then press Re-Value"
+                        value={revalueNote}
+                        onChange={(e) => setRevalueNote(e.target.value)}
+                        disabled={valuationLoading}
+                        style={{ ...micInputStyle, minHeight: 88, resize: 'vertical', display: 'block', marginBottom: 0 }}
+                      />
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute', right: 6, top: 14,
+                          width: 32, height: 32, borderRadius: '50%',
+                          background: colors.bgAlt, color: colors.inkSoft,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          pointerEvents: 'none', zIndex: 2,
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 16, height: 16 }}>
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      </div>
+                    </div>
                     <button
                       className="act"
                       disabled={valuationLoading}
