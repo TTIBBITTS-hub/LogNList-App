@@ -1984,6 +1984,9 @@ export default function Home() {
                 </button>
               )}
             </div>
+            <p style={{ fontSize: 12.5, color: colors.inkFaint, marginTop: -10, marginBottom: 16, lineHeight: 1.5 }}>
+              Everything you&rsquo;ve logged stays here until you <strong>File</strong> it into a folder &mdash; even once it has a <strong>Box</strong> location set.
+            </p>
             {unfiledItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40, fontSize: 15, lineHeight: 1.5, padding: '0 20px' }}>{emptyMsg}</p>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14, paddingBottom: selectMode ? 80 : 0 }}>
               {unfiledItems.map((item) => {
@@ -2025,11 +2028,11 @@ export default function Home() {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setSheetNewName(''); setMovingItem(item); }}
-                        title="Move to a folder"
-                        aria-label="Move to a folder"
+                        title="File into a folder"
+                        aria-label="File into a folder"
                         style={{ position: 'absolute', bottom: 10, right: 10, padding: '4px 10px', borderRadius: 999, border: `1px solid ${colors.line}`, background: '#fff', color: colors.inkSoft, fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', zIndex: 2 }}
                       >
-                        Move
+                        File
                       </button>
                     )}
                     {item.photos?.[0] ? (
@@ -2042,7 +2045,7 @@ export default function Home() {
                         ? limitWords(item.notes || 'Mixed box', 6)
                         : limitWords(item.name || 'Unidentified item', 6)}
                     </div>
-                    <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>BOX: {(item.box || '').trim() || 'not filed yet'}</div>
+                    <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>BOX: {(item.box || '').trim() || 'not set yet'}</div>
                     <span style={{ display: 'inline-block', marginTop: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '3px 8px', borderRadius: 999, background: sc.bg, color: sc.text }}>
                       {isBox ? 'MIXED BOX' : item.status?.toUpperCase()}
                     </span>
@@ -2069,7 +2072,7 @@ export default function Home() {
                   onClick={() => { setSheetNewName(''); setBulkSheetOpen(true); }}
                   style={{ ...primaryBtn, width: 'auto', padding: '10px 18px', marginBottom: 0, opacity: selectedIds.length === 0 ? 0.5 : 1, cursor: selectedIds.length === 0 ? 'default' : 'pointer' }}
                 >
-                  Move to&hellip;
+                  File to&hellip;
                 </button>
               </div>
             )}
@@ -2201,7 +2204,7 @@ export default function Home() {
                 </button>
               </div>
               <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>
-                The <strong>Silo</strong> holds everything you&rsquo;ve logged. Hit <strong>Move</strong> on an item to file it into a folder. Drag folders to reorder.
+                The <strong>Silo</strong> holds everything you&rsquo;ve logged. Hit <strong>File</strong> on an item to put it into a folder. Drag folders to reorder.
               </p>
 
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${colors.line}` }}>
@@ -2287,7 +2290,7 @@ export default function Home() {
                   <p style={{ color: colors.inkFaint, textAlign: 'center', padding: '30px 20px', fontSize: 13.5, lineHeight: 1.5 }}>
                     {showingSilo
                       ? 'The Silo is empty \u2014 log something, or it\u2019s all been filed into folders.'
-                      : <>Nothing in &ldquo;{selectedFile?.name}&rdquo; yet. In the <strong>Silo</strong>, hit <strong>Move</strong> on an item and pick this file.</>}
+                      : <>Nothing in &ldquo;{selectedFile?.name}&rdquo; yet. In the <strong>Silo</strong>, hit <strong>File</strong> on an item and pick this folder.</>}
                   </p>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
@@ -2315,11 +2318,11 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setSheetNewName(''); setMovingItem(item); }}
-                            title="Move to a folder"
-                            aria-label="Move to a folder"
+                            title="File into a folder"
+                            aria-label="File into a folder"
                             style={{ position: 'absolute', bottom: 10, right: 10, padding: '4px 10px', borderRadius: 999, border: `1px solid ${colors.line}`, background: '#fff', color: colors.inkSoft, fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', zIndex: 2 }}
                           >
-                            Move
+                            File
                           </button>
                           {item.photos?.[0] ? (
                             <img src={item.photos[0]} alt="" draggable={false} style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
@@ -2577,7 +2580,7 @@ export default function Home() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 120 }}
         >
           <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 480, maxHeight: '80vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', padding: 20 }}>
-            <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 600, marginBottom: 2 }}>MOVE TO</div>
+            <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 600, marginBottom: 2 }}>FILE INTO</div>
             <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>
               {movingItem.type === 'box' ? limitWords(movingItem.notes || 'Mixed box', 6) : limitWords(movingItem.name || 'Unidentified item', 6)}
             </div>
@@ -2639,7 +2642,7 @@ export default function Home() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 120 }}
         >
           <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 480, maxHeight: '80vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', padding: 20 }}>
-            <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 600, marginBottom: 2 }}>MOVE TO</div>
+            <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 600, marginBottom: 2 }}>FILE INTO</div>
             <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>
               {selectedIds.length} item{selectedIds.length === 1 ? '' : 's'} selected
             </div>
