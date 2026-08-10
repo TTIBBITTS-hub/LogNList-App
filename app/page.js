@@ -2981,6 +2981,22 @@ export default function Home() {
                     <div style={{ fontSize: 13, color: colors.inkSoft, marginTop: 10, lineHeight: 1.55 }}>{openItem.estimate.reasoning}</div>
                   )}
 
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button
+                      className="act"
+                      disabled={valuationLoading}
+                      onClick={() => runValuation(openItem, 'deep')}
+                      style={{ ...outlineBtn, flex: 1, opacity: valuationLoading ? 0.6 : 1 }}
+                    >
+                      {valuationLoading ? 'Re-valuing…' : 'Get this wrong? Re-value'}
+                    </button>
+                  </div>
+                  {valuationLoading && (
+                    <p style={{ fontSize: 12, color: colors.inkFaint, marginTop: 8 }}>
+                      Add more detail to notes or better photos first for a more accurate result.
+                    </p>
+                  )}
+
                   {openItem.listing && (
                     <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginTop: 14 }}>
                       <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>{openItem.listing.title}</div>
