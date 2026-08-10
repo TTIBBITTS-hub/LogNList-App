@@ -228,6 +228,7 @@ export default function Home() {
 
   const [openItem, setOpenItem] = useState(null);
   const [valuationLoading, setValuationLoading] = useState(false);
+  const [revalueNote, setRevalueNote] = useState('');
   const [askingPrice, setAskingPrice] = useState('');
 
   // File-it
@@ -601,16 +602,19 @@ export default function Home() {
     }
   }
 
-  async function runValuation(item, mode) {
+  async function runValuation(item, mode, extraDetail) {
     setValuationLoading(true);
     try {
+      const combinedNotes = extraDetail && extraDetail.trim()
+        ? [item.notes, extraDetail.trim()].filter(Boolean).join('\n\n')
+        : item.notes;
       const res = await fetch('/api/valuate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: item.name,
           category: item.category,
-          notes: item.notes,
+          notes: combinedNotes,
           photos: item.photos,
           mode: mode || 'deep',
         }),
@@ -638,12 +642,15 @@ export default function Home() {
         body: JSON.stringify({
           name: item.name || data.result.identified_item,
           category: item.category || data.result.identified_category,
+          notes: combinedNotes,
           estimate,
           listing,
         }),
       });
       const patched = await patchRes.json();
       setOpenItem(patched.item);
+      setDetailDraft((d) => ({ ...d, notes: patched.item?.notes || '' }));
+      setRevalueNote('');
       await loadItems();
     } catch (e) {
       setError('Valuation failed: ' + e.message);
@@ -2981,21 +2988,23 @@ export default function Home() {
                     <div style={{ fontSize: 13, color: colors.inkSoft, marginTop: 10, lineHeight: 1.55 }}>{openItem.estimate.reasoning}</div>
                   )}
 
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <div style={{ marginTop: 12 }}>
+                    <textarea
+                      placeholder="Value seem wrong? Add more details and press Re-Value"
+                      value={revalueNote}
+                      onChange={(e) => setRevalueNote(e.target.value)}
+                      disabled={valuationLoading}
+                      style={{ ...micInputStyle, minHeight: 56, resize: 'vertical', display: 'block', marginBottom: 8 }}
+                    />
                     <button
                       className="act"
                       disabled={valuationLoading}
-                      onClick={() => runValuation(openItem, 'deep')}
-                      style={{ ...outlineBtn, flex: 1, opacity: valuationLoading ? 0.6 : 1 }}
+                      onClick={() => runValuation(openItem, 'deep', revalueNote)}
+                      style={{ ...outlineBtn, width: '100%', opacity: valuationLoading ? 0.6 : 1 }}
                     >
-                      {valuationLoading ? 'Re-valuing…' : 'Get this wrong? Re-value'}
+                      {valuationLoading ? 'Re-valuing…' : 'Re-Value'}
                     </button>
                   </div>
-                  {valuationLoading && (
-                    <p style={{ fontSize: 12, color: colors.inkFaint, marginTop: 8 }}>
-                      Add more detail to notes or better photos first for a more accurate result.
-                    </p>
-                  )}
 
                   {openItem.listing && (
                     <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginTop: 14 }}>
