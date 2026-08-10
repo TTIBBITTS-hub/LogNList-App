@@ -71,6 +71,19 @@ function limitWords(text, maxWords) {
   return words.slice(0, maxWords).join(' ') + '\u2026';
 }
 
+function estimateBadgeLabel(item) {
+  const e = item?.estimate;
+  if (!e) return null;
+  const cur = e.currency || 'NZD';
+  const low = e.low;
+  const high = e.high;
+  if (low != null && high != null) {
+    return low === high ? `$${low} ${cur}` : `$${low} - $${high} ${cur}`;
+  }
+  const single = low ?? high ?? e.suggested;
+  return single != null ? `$${single} ${cur}` : null;
+}
+
 function downloadItemPhotos(item) {
   const photos = item.photos || [];
   const slug = slugify(item.name || 'item');
@@ -1886,11 +1899,15 @@ export default function Home() {
                     onClick={() => { setOpenItem(item); setNotice(null); }}
                     style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
                   >
-                    {item.status === 'listed' && item.listing?.price != null && (
+                    {item.status === 'listed' && item.listing?.price != null ? (
                       <div style={{ position: 'absolute', top: 10, right: 10, background: colors.success, color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>
                         ${item.listing.price}
                       </div>
-                    )}
+                    ) : estimateBadgeLabel(item) ? (
+                      <div style={{ position: 'absolute', top: 10, right: 10, maxWidth: 90, textAlign: 'right', background: colors.successBg, color: colors.success, fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999, lineHeight: 1.3 }}>
+                        {estimateBadgeLabel(item)}
+                      </div>
+                    ) : null}
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setSheetNewName(''); setMovingItem(item); }}
@@ -2148,6 +2165,15 @@ export default function Home() {
                           onClick={() => { if (!dragItemId) { setOpenItem(item); setNotice(null); } }}
                           style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)', opacity: dragItemId === item.id ? 0.4 : 1 }}
                         >
+                          {item.status === 'listed' && item.listing?.price != null ? (
+                            <div style={{ position: 'absolute', top: 10, right: 10, background: colors.success, color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>
+                              ${item.listing.price}
+                            </div>
+                          ) : estimateBadgeLabel(item) ? (
+                            <div style={{ position: 'absolute', top: 10, right: 10, maxWidth: 90, textAlign: 'right', background: colors.successBg, color: colors.success, fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999, lineHeight: 1.3 }}>
+                              {estimateBadgeLabel(item)}
+                            </div>
+                          ) : null}
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setSheetNewName(''); setMovingItem(item); }}
@@ -2233,8 +2259,17 @@ export default function Home() {
                   <div
                     key={item.id}
                     onClick={() => { setOpenItem(item); setNotice(null); }}
-                    style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
+                    style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
                   >
+                    {item.status === 'listed' && item.listing?.price != null ? (
+                      <div style={{ position: 'absolute', top: 10, right: 10, background: colors.success, color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>
+                        ${item.listing.price}
+                      </div>
+                    ) : estimateBadgeLabel(item) ? (
+                      <div style={{ position: 'absolute', top: 10, right: 10, maxWidth: 90, textAlign: 'right', background: colors.successBg, color: colors.success, fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999, lineHeight: 1.3 }}>
+                        {estimateBadgeLabel(item)}
+                      </div>
+                    ) : null}
                     {item.photos?.[0] ? (
                       <img src={item.photos[0]} alt="" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
                     ) : (
@@ -2678,11 +2713,15 @@ export default function Home() {
                         onClick={() => { setViewingBox(null); setOpenItem(item); setNotice(null); }}
                         style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
                       >
-                        {item.status === 'listed' && item.listing?.price != null && (
+                        {item.status === 'listed' && item.listing?.price != null ? (
                           <div style={{ position: 'absolute', top: 10, right: 10, background: colors.success, color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>
                             ${item.listing.price}
                           </div>
-                        )}
+                        ) : estimateBadgeLabel(item) ? (
+                          <div style={{ position: 'absolute', top: 10, right: 10, maxWidth: 90, textAlign: 'right', background: colors.successBg, color: colors.success, fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999, lineHeight: 1.3 }}>
+                            {estimateBadgeLabel(item)}
+                          </div>
+                        ) : null}
                         {item.photos?.[0] ? (
                           <img src={item.photos[0]} alt="" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
                         ) : (
