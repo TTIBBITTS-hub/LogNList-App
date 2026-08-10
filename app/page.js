@@ -242,6 +242,9 @@ export default function Home() {
   const [pickedItemId, setPickedItemId] = useState(null);
   const [movingItem, setMovingItem] = useState(null);   // item shown in the "move to folder" sheet
   const [sheetNewName, setSheetNewName] = useState('');
+  const [selectMode, setSelectMode] = useState(false);   // Silo multi-select mode
+  const [selectedIds, setSelectedIds] = useState([]);    // ids checked while selectMode is on
+  const [bulkSheetOpen, setBulkSheetOpen] = useState(false); // "move to folder" sheet for the selection
 
   // Library / Add a book
   const [addingBook, setAddingBook] = useState(false);
@@ -894,6 +897,38 @@ export default function Home() {
     setMovingItem(null);
     if (data.item?.id) await moveItemToFile(item.id, data.item.id);
     else await loadItems();
+  }
+
+  function toggleSelected(id) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds([]);
+    setBulkSheetOpen(false);
+  }
+
+  // File every selected item into the same folder in one go.
+  async function bulkFileInto(fileId) {
+    const ids = [...selectedIds];
+    setBulkSheetOpen(false);
+    exitSelectMode();
+    await Promise.all(ids.map((id) => moveItemToFile(id, fileId)));
+  }
+
+  async function createFolderIntoBulk(name) {
+    const nm = (name || '').trim();
+    if (!nm) return;
+    const res = await fetch('/api/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'file', name: nm, category: String(files.length) }),
+    });
+    const data = await res.json();
+    setSheetNewName('');
+    if (data.item?.id) await bulkFileInto(data.item.id);
+    else { setBulkSheetOpen(false); exitSelectMode(); await loadItems(); }
   }
 
   // ── Library / Add a book ─────────────────────────────────
@@ -1902,18 +1937,46 @@ export default function Home() {
 
         {loaded && tab === 'inventory' && (
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Silo ({unfiledItems.length})</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Silo ({unfiledItems.length})</h2>
+              {unfiledItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+                  style={{ background: 'none', border: `1.5px solid ${colors.line}`, borderRadius: 999, padding: '6px 14px', color: colors.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  {selectMode ? 'Cancel' : 'Select'}
+                </button>
+              )}
+            </div>
             {unfiledItems.length === 0 && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40, fontSize: 15, lineHeight: 1.5, padding: '0 20px' }}>{emptyMsg}</p>}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 14, paddingBottom: selectMode ? 80 : 0 }}>
               {unfiledItems.map((item) => {
                 const isBox = item.type === 'box';
                 const sc = isBox ? statusColors.box : (statusColors[item.status] || statusColors.logged);
+                const checked = selectedIds.includes(item.id);
                 return (
                   <div
                     key={item.id}
-                    onClick={() => { setOpenItem(item); setNotice(null); }}
-                    style={{ background: '#fff', border: `1px solid ${colors.line}`, borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
+                    onClick={() => (selectMode ? toggleSelected(item.id) : (setOpenItem(item), setNotice(null)))}
+                    style={{ background: '#fff', border: `1px solid ${checked ? colors.ink : colors.line}`, outline: checked ? `1.5px solid ${colors.ink}` : 'none', borderRadius: 14, padding: 12, cursor: 'pointer', position: 'relative', boxShadow: '0 1px 3px rgba(23,26,32,0.04)' }}
                   >
+                    {selectMode && (
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute', top: 10, left: 10, width: 22, height: 22, borderRadius: '50%',
+                          border: `1.5px solid ${checked ? colors.ink : colors.line}`, background: checked ? colors.ink : '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2,
+                        }}
+                      >
+                        {checked && (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 6L9 17l-5-5" />
+                          </svg>
+                        )}
+                      </div>
+                    )}
                     {item.status === 'listed' && item.listing?.price != null ? (
                       <div style={{ position: 'absolute', top: 10, right: 10, background: colors.success, color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>
                         ${item.listing.price}
@@ -1923,15 +1986,17 @@ export default function Home() {
                         {estimateBadgeLabel(item)}
                       </div>
                     ) : null}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setSheetNewName(''); setMovingItem(item); }}
-                      title="Move to a folder"
-                      aria-label="Move to a folder"
-                      style={{ position: 'absolute', bottom: 10, right: 10, padding: '4px 10px', borderRadius: 999, border: `1px solid ${colors.line}`, background: '#fff', color: colors.inkSoft, fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', zIndex: 2 }}
-                    >
-                      Move
-                    </button>
+                    {!selectMode && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setSheetNewName(''); setMovingItem(item); }}
+                        title="Move to a folder"
+                        aria-label="Move to a folder"
+                        style={{ position: 'absolute', bottom: 10, right: 10, padding: '4px 10px', borderRadius: 999, border: `1px solid ${colors.line}`, background: '#fff', color: colors.inkSoft, fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', zIndex: 2 }}
+                      >
+                        Move
+                      </button>
+                    )}
                     {item.photos?.[0] ? (
                       <img src={item.photos[0]} alt="" style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 9, marginBottom: 10, background: colors.bgAlt }} />
                     ) : (
@@ -1950,6 +2015,29 @@ export default function Home() {
                 );
               })}
             </div>
+
+            {selectMode && (
+              <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 90, background: '#fff', borderTop: `1px solid ${colors.line}`, padding: '12px 20px calc(12px + env(safe-area-inset-bottom))', boxShadow: '0 -2px 10px rgba(23,26,32,0.08)', display: 'flex', alignItems: 'center', gap: 12, maxWidth: 640, margin: '0 auto' }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: colors.ink, flex: 1 }}>
+                  {selectedIds.length} selected
+                </span>
+                <button
+                  type="button"
+                  onClick={exitSelectMode}
+                  style={{ ...outlineBtn, width: 'auto', padding: '10px 16px', marginBottom: 0 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedIds.length === 0}
+                  onClick={() => { setSheetNewName(''); setBulkSheetOpen(true); }}
+                  style={{ ...primaryBtn, width: 'auto', padding: '10px 18px', marginBottom: 0, opacity: selectedIds.length === 0 ? 0.5 : 1, cursor: selectedIds.length === 0 ? 'default' : 'pointer' }}
+                >
+                  Move to&hellip;
+                </button>
+              </div>
+            )}
 
             <div style={{ textAlign: 'center', marginTop: 28, paddingTop: 18, borderTop: `1px solid ${colors.line}` }}>
               <button
@@ -2506,6 +2594,54 @@ export default function Home() {
             </div>
 
             <button type="button" onClick={() => setMovingItem(null)} style={{ ...outlineBtn, width: '100%' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {bulkSheetOpen && (
+        <div
+          onClick={() => setBulkSheetOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(23,26,32,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 120 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 480, maxHeight: '80vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', padding: 20 }}>
+            <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 600, marginBottom: 2 }}>MOVE TO</div>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>
+              {selectedIds.length} item{selectedIds.length === 1 ? '' : 's'} selected
+            </div>
+
+            {files.length === 0 && (
+              <p style={{ color: colors.inkFaint, fontSize: 13, marginBottom: 14 }}>No folders yet &mdash; make one below.</p>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+              {files.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => bulkFileInto(f.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${colors.line}`, background: '#fff', color: colors.ink, fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={colors.inkSoft} strokeWidth="2" style={{ flexShrink: 0 }}>
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                  </svg>
+                  <span style={{ flex: 1 }}>{f.name || 'Untitled'}</span>
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input
+                type="text"
+                placeholder="New folder name..."
+                value={sheetNewName}
+                onChange={(e) => setSheetNewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') createFolderIntoBulk(sheetNewName); }}
+                style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+              />
+              <button type="button" onClick={() => createFolderIntoBulk(sheetNewName)} disabled={!sheetNewName.trim()} style={{ ...primaryBtn, flex: '0 0 auto', width: 'auto', padding: '0 18px', opacity: sheetNewName.trim() ? 1 : 0.5 }}>Create</button>
+            </div>
+
+            <button type="button" onClick={() => setBulkSheetOpen(false)} style={{ ...outlineBtn, width: '100%' }}>Cancel</button>
           </div>
         </div>
       )}
