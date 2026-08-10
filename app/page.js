@@ -3281,10 +3281,10 @@ export default function Home() {
               )}
 
               <button
-                onClick={() => deleteItem(openItem.id)}
+                onClick={() => { if (confirm(`Delete "${openItem.name || 'this item'}"? This can't be undone.`)) deleteItem(openItem.id); }}
                 style={{ ...outlineBtn, color: colors.accent, borderColor: colors.accent }}
               >
-                Remove
+                Delete
               </button>
             </div>
           </div>
