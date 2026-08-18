@@ -175,6 +175,24 @@ function listingShareText(item) {
   return lines.join('\n');
 }
 
+// An enquiry row stores the buyer's details as JSON in `notes` and the item
+// it's about in `category`. This unpacks it into something readable.
+function parseEnquiry(row) {
+  let d = {};
+  try { d = JSON.parse(row.notes || '{}'); } catch (e) { /* older or hand-edited row */ }
+  return {
+    id: row.id,
+    itemId: row.category || '',
+    name: row.name || 'Someone',
+    phone: d.phone || '',
+    email: d.email || '',
+    message: d.message || '',
+    method: d.method === 'post' ? 'post' : 'pickup',
+    at: d.at || row.created_at,
+    status: row.status,
+  };
+}
+
 // ── Reminder dates ─────────────────────────────────────────
 // Dates are stored as plain 'YYYY-MM-DD' strings and compared as strings, so
 // nothing shifts around when the clocks change or the phone's timezone differs.
@@ -282,6 +300,8 @@ export default function Home() {
   // Hiding "Coming up" is deliberately not saved anywhere — it comes back
   // next time the app is opened fresh.
   const [comingUpHidden, setComingUpHidden] = useState(false);
+  // Notes ticked off in the last second — held on screen so the tick is visible.
+  const [justTicked, setJustTicked] = useState([]);
 
   function startVoice(field, setter) {
     const Ctor =
@@ -342,9 +362,14 @@ export default function Home() {
     return (f.category !== '' && f.category != null && !isNaN(n)) ? n : 1e9;
   };
   const files = items.filter((i) => i.type === 'file').sort((a, b) => filePos(a) - filePos(b));
-  const realItems = items.filter((i) => i.type !== 'file' && i.type !== 'book' && i.type !== 'note');
+  const realItems = items.filter((i) => i.type !== 'file' && i.type !== 'book' && i.type !== 'note' && i.type !== 'enquiry');
   const books = items.filter((i) => i.type === 'book');
-  const findableItems = items.filter((i) => i.type !== 'file' && i.type !== 'note');
+  const findableItems = items.filter((i) => i.type !== 'file' && i.type !== 'note' && i.type !== 'enquiry');
+
+  // ── Enquiries from the sell pages ──────────────────────
+  const enquiries = items.filter((i) => i.type === 'enquiry').map(parseEnquiry);
+  const newEnquiries = enquiries.filter((e) => e.status === 'new');
+  const enquiriesFor = (itemId) => enquiries.filter((e) => String(e.itemId) === String(itemId));
 
   // ── Notes ──────────────────────────────────────────────
   // A note is just an item with type 'note'. The body lives in `notes`, the
@@ -352,7 +377,7 @@ export default function Home() {
   // ticking one off sets status to 'done'.
   const noteList = items.filter((i) => i.type === 'note');
   const dueNotes = noteList
-    .filter((n) => n.category && n.status !== 'done')
+    .filter((n) => n.category && (n.status !== 'done' || justTicked.includes(n.id)))
     .sort((a, b) => String(a.category).localeCompare(String(b.category)));
   const unfiledItems = realItems.filter((i) => !i.file_id);
   const itemsInFile = (fileId) =>
@@ -1045,7 +1070,11 @@ export default function Home() {
     }
   }
 
+  // Change the note on screen straight away, then tell the server. Reloading the
+  // whole inventory first made every tick feel like it had stalled, because it
+  // re-downloads every item's photos.
   async function patchNote(note, patch) {
+    setItems((prev) => prev.map((i) => (i.id === note.id ? { ...i, ...patch } : i)));
     try {
       const res = await fetch(`/api/items/${note.id}`, {
         method: 'PATCH',
@@ -1054,18 +1083,70 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      await loadItems();
+      if (data.item) setItems((prev) => prev.map((i) => (i.id === data.item.id ? data.item : i)));
     } catch (err) {
       setError("Couldn't update that note: " + err.message);
+      await loadItems(); // put it back the way it really is
+    }
+  }
+
+  // Tick it off: the green tick shows instantly and stays put for a beat before
+  // the note drops out of the list, so you can see it landed.
+  function tickNote(note) {
+    const wasDone = note.status === 'done';
+    patchNote(note, { status: wasDone ? 'logged' : 'done' });
+    if (wasDone) return;
+    setJustTicked((prev) => (prev.includes(note.id) ? prev : [...prev, note.id]));
+    setTimeout(() => setJustTicked((prev) => prev.filter((id) => id !== note.id)), 1200);
+  }
+
+  // ── Sell page ──────────────────────────────────────────
+  function sellUrl(item) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/sell/${item.id}`;
+  }
+
+  async function copySellLink(item) {
+    const ok = await copyToClipboard(sellUrl(item));
+    setNotice(ok ? 'Link copied — paste it wherever the buyers are.' : "Couldn't copy the link.");
+  }
+
+  async function shareSellLink(item) {
+    const url = sellUrl(item);
+    const title = (item.listing && item.listing.title) || item.name || 'For sale';
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title, text: title, url });
+        return;
+      }
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+    }
+    const ok = await copyToClipboard(url);
+    setNotice(ok ? 'Link copied — paste it wherever the buyers are.' : "Couldn't share the link.");
+  }
+
+  async function markEnquiryRead(enq) {
+    setItems((prev) => prev.map((i) => (i.id === enq.id ? { ...i, status: 'done' } : i)));
+    try {
+      await fetch(`/api/items/${enq.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'done' }),
+      });
+    } catch (err) {
+      setError("Couldn't update that enquiry: " + err.message);
+      await loadItems();
     }
   }
 
   async function deleteNote(note) {
+    setItems((prev) => prev.filter((i) => i.id !== note.id));
     try {
       await fetch(`/api/items/${note.id}`, { method: 'DELETE' });
-      await loadItems();
     } catch (err) {
       setError("Couldn't delete that note: " + err.message);
+      await loadItems();
     }
   }
 
@@ -2016,6 +2097,43 @@ export default function Home() {
 
         {!loaded && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40 }}>Loading...</p>}
 
+        {/* Someone's asked about something you've got for sale. */}
+        {loaded && newEnquiries.length > 0 && (
+          <div style={{ background: colors.successBg, borderRadius: 14, padding: '12px 14px', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.success, fontWeight: 700, marginBottom: 8 }}>
+              {newEnquiries.length === 1 ? 'New enquiry' : `${newEnquiries.length} new enquiries`}
+            </div>
+            {newEnquiries.map((e) => {
+              const about = items.find((i) => String(i.id) === String(e.itemId));
+              return (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '6px 0' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+                      {e.name} &middot; <span style={{ fontWeight: 600, color: colors.inkSoft }}>{e.method === 'post' ? 'wants it posted' : 'will pick up'}</span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: colors.inkSoft, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {(about && ((about.listing && about.listing.title) || about.name)) || 'an item'}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: colors.inkSoft, marginTop: 2 }}>
+                      {e.phone && <a href={`tel:${e.phone}`} style={{ color: colors.ink, fontWeight: 600 }}>{e.phone}</a>}
+                      {e.phone && e.email ? ' · ' : ''}
+                      {e.email && <a href={`mailto:${e.email}`} style={{ color: colors.ink, fontWeight: 600 }}>{e.email}</a>}
+                    </div>
+                    {e.message && <div style={{ fontSize: 12.5, color: colors.inkSoft, marginTop: 4, lineHeight: 1.5 }}>&ldquo;{e.message}&rdquo;</div>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => markEnquiryRead(e)}
+                    style={{ flex: '0 0 auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: colors.inkFaint, padding: '2px 0 2px 8px' }}
+                  >
+                    Done
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Coming up — anything with a reminder date that isn't ticked off yet.
             Sits above whichever tab you're on so it can't be missed. */}
         {loaded && dueNotes.length > 0 && !comingUpHidden && (
@@ -2035,12 +2153,23 @@ export default function Home() {
               <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
                 <button
                   type="button"
-                  className="act"
-                  onClick={() => patchNote(n, { status: 'done' })}
+                  onClick={() => tickNote(n)}
                   title="Tick it off"
                   aria-label="Tick it off"
-                  style={{ flex: '0 0 auto', width: 22, height: 22, borderRadius: '50%', border: `1.5px solid ${colors.line}`, background: '#fff', cursor: 'pointer', padding: 0 }}
-                />
+                  style={{
+                    flex: '0 0 auto', width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                    border: `1.5px solid ${n.status === 'done' ? colors.success : colors.line}`,
+                    background: n.status === 'done' ? colors.success : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background 0.15s ease, border-color 0.15s ease',
+                  }}
+                >
+                  {n.status === 'done' && (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+                      <path d="M4 12.5l5 5L20 6.5" />
+                    </svg>
+                  )}
+                </button>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.name || 'Note'}</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: dueColour(n.category) }}>{dueLabel(n.category)}</div>
@@ -2423,7 +2552,9 @@ export default function Home() {
           </div>
         )}
         {loaded && tab === 'notes' && (() => {
-          const shownNotes = noteFilter === 'open' ? noteList.filter((n) => n.status !== 'done') : noteList;
+          const shownNotes = noteFilter === 'open'
+            ? noteList.filter((n) => n.status !== 'done' || justTicked.includes(n.id))
+            : noteList;
           return (
             <div>
               {/* Write one */}
@@ -2569,8 +2700,7 @@ export default function Home() {
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                         <button
                           type="button"
-                          className="act"
-                          onClick={() => patchNote(n, { status: done ? 'logged' : 'done' })}
+                          onClick={() => tickNote(n)}
                           title={done ? 'Put it back' : 'Tick it off'}
                           aria-label={done ? 'Put it back' : 'Tick it off'}
                           style={{
@@ -2578,6 +2708,7 @@ export default function Home() {
                             border: done ? `1.5px solid ${colors.success}` : `1.5px solid ${colors.line}`,
                             background: done ? colors.success : '#fff',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            transition: 'background 0.15s ease, border-color 0.15s ease',
                           }}
                         >
                           {done && (
@@ -3859,6 +3990,51 @@ export default function Home() {
                   </p>
                 </div>
               ))}
+
+              {openItem.status === 'listed' && openItem.listing && (
+                <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 6 }}>Its own sell page</div>
+                  <p style={{ fontSize: 12.5, color: colors.inkFaint, margin: '0 0 10px', lineHeight: 1.5 }}>
+                    Anyone with this link can see it and send you an enquiry — no password needed.
+                  </p>
+                  <div style={{ background: '#fff', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: colors.inkSoft, wordBreak: 'break-all', marginBottom: 10 }}>
+                    {sellUrl(openItem)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="act" onClick={() => shareSellLink(openItem)} style={{ ...primaryBtn, flex: 1 }}>Share link</button>
+                    <button className="act" onClick={() => copySellLink(openItem)} style={{ ...outlineBtn, flex: 1 }}>Copy link</button>
+                  </div>
+                  <a
+                    href={sellUrl(openItem)}
+                    target="_blank"
+                    rel="noopener"
+                    style={{ display: 'block', textAlign: 'center', marginTop: 10, fontSize: 12.5, fontWeight: 600, color: colors.inkSoft }}
+                  >
+                    See what the buyer sees &#8599;
+                  </a>
+
+                  {enquiriesFor(openItem.id).length > 0 && (
+                    <div style={{ marginTop: 14, borderTop: `1px solid ${colors.line}`, paddingTop: 12 }}>
+                      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 8 }}>
+                        Enquiries ({enquiriesFor(openItem.id).length})
+                      </div>
+                      {enquiriesFor(openItem.id).map((e) => (
+                        <div key={e.id} style={{ background: '#fff', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+                            {e.name} <span style={{ fontWeight: 600, color: colors.inkSoft }}>&middot; {e.method === 'post' ? 'wants it posted' : 'will pick up'}</span>
+                          </div>
+                          <div style={{ fontSize: 12.5, marginTop: 3 }}>
+                            {e.phone && <a href={`tel:${e.phone}`} style={{ color: colors.ink, fontWeight: 600 }}>{e.phone}</a>}
+                            {e.phone && e.email ? ' · ' : ''}
+                            {e.email && <a href={`mailto:${e.email}`} style={{ color: colors.ink, fontWeight: 600 }}>{e.email}</a>}
+                          </div>
+                          {e.message && <div style={{ fontSize: 12.5, color: colors.inkSoft, marginTop: 4, lineHeight: 1.5 }}>&ldquo;{e.message}&rdquo;</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {openItem.listing && (
                 <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
