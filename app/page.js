@@ -122,6 +122,95 @@ async function copyToClipboard(text) {
   }
 }
 
+// ── Sharing ────────────────────────────────────────────────
+// Turn the base64 photos stored on an item into real File objects so the
+// phone's share sheet can attach them to a text or email.
+function itemPhotoFiles(item) {
+  const slug = slugify(item.name || 'item');
+  const files = [];
+  (item.photos || []).forEach((photo, idx) => {
+    try {
+      if (typeof photo !== 'string' || !photo.startsWith('data:')) return;
+      const [header, b64] = photo.split(',');
+      if (!b64) return;
+      const mime = (header.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+      files.push(new File([bytes], `${slug}-photo-${idx + 1}.${ext}`, { type: mime }));
+    } catch (e) {
+      // A photo we can't decode just doesn't go along for the ride.
+    }
+  });
+  return files;
+}
+
+// The valuation, written out the way you'd send it to someone.
+function valuationShareText(item) {
+  const e = item.estimate || {};
+  const cur = e.currency || 'NZD';
+  const lines = [];
+  lines.push(item.name ? item.name : 'Item valuation');
+  lines.push('');
+  if (e.low != null && e.high != null) {
+    lines.push(`Estimated resale value: $${e.low} - $${e.high} ${cur}`);
+  } else if (e.low != null || e.high != null) {
+    lines.push(`Estimated resale value: $${e.low ?? e.high} ${cur}`);
+  }
+  if (e.newPrice) lines.push(`New today (RRP): ~$${e.newPrice} ${cur}`);
+  if (e.reasoning) { lines.push(''); lines.push(e.reasoning); }
+  lines.push('');
+  lines.push('Valued with Log&List.');
+  return lines.join('\n');
+}
+
+// The for-sale ad, ready to paste anywhere.
+function listingShareText(item) {
+  const l = item.listing || {};
+  const lines = [];
+  if (l.title) lines.push(l.title);
+  if (l.price != null && l.price !== '') { lines.push(''); lines.push(`Price: $${l.price}`); }
+  if (l.description) { lines.push(''); lines.push(l.description); }
+  return lines.join('\n');
+}
+
+// Share + copy icons that sit in the top-right corner of a write-up card.
+const writeupIconBtn = {
+  width: 34,
+  height: 34,
+  flex: '0 0 auto',
+  padding: 0,
+  borderRadius: '50%',
+  border: `1.5px solid ${colors.line}`,
+  background: '#fff',
+  color: colors.inkSoft,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+function WriteupActions({ onShare, onCopy }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, flex: '0 0 auto', marginLeft: 10 }}>
+      <button className="act" type="button" onClick={onShare} title="Share with photos" aria-label="Share with photos" style={writeupIconBtn}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+          <path d="M12 16V3" />
+          <path d="m7 8 5-5 5 5" />
+          <path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+        </svg>
+      </button>
+      <button className="act" type="button" onClick={onCopy} title="Copy the text" aria-label="Copy the text" style={writeupIconBtn}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+          <rect x="9" y="9" width="11" height="11" rx="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 export default function Home() {
   const [tab, setTab] = useState('log');
   const [emptyMsg, setEmptyMsg] = useState(() => EMPTY_MESSAGES[Math.floor(Math.random() * EMPTY_MESSAGES.length)]);
@@ -785,6 +874,47 @@ export default function Home() {
     else if (field === 'description') value = item.listing.description || '';
     const ok = await copyToClipboard(value);
     setNotice(ok ? `${field.charAt(0).toUpperCase() + field.slice(1)} copied.` : "Couldn't copy \u2014 select the text manually.");
+  }
+
+  // Copy a whole write-up (the valuation, or the for-sale ad) as one block of text.
+  async function copyWriteup(item, kind) {
+    const text = kind === 'listing' ? listingShareText(item) : valuationShareText(item);
+    const label = kind === 'listing' ? 'Sales write-up' : 'Valuation';
+    const ok = await copyToClipboard(text);
+    setNotice(ok ? `${label} copied \u2014 paste it into an email or a text.` : "Couldn't copy \u2014 select the text manually.");
+  }
+
+  // Share a write-up with its photos attached. On a phone this opens the share
+  // sheet (Messages, Mail, WhatsApp...). On a desktop that can't do it, we copy
+  // the text and save the photos instead so there's still something to send.
+  async function shareWriteup(item, kind) {
+    const text = kind === 'listing' ? listingShareText(item) : valuationShareText(item);
+    const label = kind === 'listing' ? 'Sales write-up' : 'Valuation';
+    const title = kind === 'listing'
+      ? ((item.listing && item.listing.title) || item.name || 'For sale')
+      : (item.name ? `${item.name} \u2014 what it's worth` : 'Item valuation');
+    const files = itemPhotoFiles(item);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        if (files.length && navigator.canShare && navigator.canShare({ files })) {
+          await navigator.share({ files, title, text });
+          return;
+        }
+        await navigator.share({ title, text });
+        if (files.length) setNotice('Shared. Photos couldn\u2019t be attached on this device \u2014 use Copy and add them yourself.');
+        return;
+      }
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+      // Anything else: fall through to the copy-and-save fallback below.
+    }
+    const ok = await copyToClipboard(text);
+    const n = downloadItemPhotos(item);
+    if (ok) {
+      setNotice(`${label} copied` + (n ? ` and ${n} photo${n === 1 ? '' : 's'} saved to your downloads.` : '.'));
+    } else {
+      setError("Couldn't share on this device \u2014 select the text and copy it manually.");
+    }
   }
 
   async function deleteItem(id) {
@@ -3175,7 +3305,13 @@ export default function Home() {
 
               {openItem.type !== 'book' && (openItem.estimate ? (
                 <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 4 }}>Estimated resale range</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, paddingTop: 6 }}>Estimated resale range</div>
+                    <WriteupActions
+                      onShare={() => shareWriteup(openItem, 'valuation')}
+                      onCopy={() => copyWriteup(openItem, 'valuation')}
+                    />
+                  </div>
                   <div style={{ fontSize: 26, fontWeight: 700, color: colors.success }}>
                     ${openItem.estimate.low} &ndash; ${openItem.estimate.high} {openItem.estimate.currency}
                   </div>
@@ -3223,7 +3359,13 @@ export default function Home() {
 
                   {openItem.listing && (
                     <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginTop: 14 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>{openItem.listing.title}</div>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.35 }}>{openItem.listing.title}</div>
+                        <WriteupActions
+                          onShare={() => shareWriteup(openItem, 'listing')}
+                          onCopy={() => copyWriteup(openItem, 'listing')}
+                        />
+                      </div>
                       <div style={{ fontSize: 13.5, color: colors.inkSoft, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{openItem.listing.description}</div>
                     </div>
                   )}
@@ -3299,9 +3441,18 @@ export default function Home() {
                 </div>
               ))}
 
-              {openItem.status === 'listed' && openItem.listing && (
+              {openItem.listing && (
                 <div style={{ background: colors.bgAlt, borderRadius: 14, padding: 16, marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 10 }}>Sell on Facebook Marketplace</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, paddingTop: 8 }}>Sell on Facebook Marketplace</div>
+                    <WriteupActions
+                      onShare={() => shareWriteup(openItem, 'listing')}
+                      onCopy={() => copyWriteup(openItem, 'listing')}
+                    />
+                  </div>
+                  {openItem.status === 'sold' && (
+                    <p style={{ fontSize: 12, color: colors.inkFaint, margin: '0 0 10px', fontWeight: 600 }}>Marked sold — the write-up is still here if you need it again.</p>
+                  )}
                   <p style={{ fontSize: 12, color: colors.inkFaint, margin: '0 0 10px' }}>Copy each field into the matching box on Facebook's create-listing form.</p>
 
                   {['title', 'price', 'description'].map((field) => (
