@@ -7,6 +7,13 @@ export function middleware(request) {
     return NextResponse.next();
   }
 
+  // The sell pages are the shop window — buyers have to reach them without a
+  // password. /api/sell only ever returns listing fields, never the location,
+  // the valuation or your own notes.
+  if (pathname.startsWith('/sell') || pathname.startsWith('/api/sell')) {
+    return NextResponse.next();
+  }
+
   const cookie = request.cookies.get('auth_token');
   const expected = process.env.SESSION_TOKEN;
 
