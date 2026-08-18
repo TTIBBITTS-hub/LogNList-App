@@ -279,6 +279,9 @@ export default function Home() {
   const [notePhotos, setNotePhotos] = useState([null, null, null]);
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteFilter, setNoteFilter] = useState('open'); // 'open' | 'all'
+  // Hiding "Coming up" is deliberately not saved anywhere — it comes back
+  // next time the app is opened fresh.
+  const [comingUpHidden, setComingUpHidden] = useState(false);
 
   function startVoice(field, setter) {
     const Ctor =
@@ -1034,7 +1037,6 @@ export default function Home() {
       setNoteText('');
       setNoteDue('');
       setNotePhotos([null, null, null]);
-      setNotice(noteDue ? 'Noted — it’ll show up in Coming up.' : 'Noted.');
       await loadItems();
     } catch (err) {
       setError("Couldn't save that note: " + err.message);
@@ -1969,7 +1971,7 @@ export default function Home() {
           <div style={{ color: 'rgba(255,255,255,0.62)', fontSize: 13, letterSpacing: '0.01em', fontWeight: 400, textAlign: 'right' }}>Log it. List it. Find it again.</div>
         </header>
 
-        <nav style={{ display: 'flex', gap: 4, background: colors.bg, borderBottom: `1px solid ${colors.line}`, padding: '10px 8px 12px' }}>
+        <nav style={{ display: 'flex', gap: 7, background: colors.bg, borderBottom: `1px solid ${colors.line}`, padding: '10px 10px 12px' }}>
           {[
             { key: 'log', label: 'Log it' },
             { key: 'inventory', label: 'Silo' },
@@ -1991,7 +1993,9 @@ export default function Home() {
                 }}
                 style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}
               >
-                <span style={{ position: 'relative', width: 44, height: 44, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? colors.ink : colors.bgAlt, color: active ? '#fff' : colors.inkSoft, transition: 'background 0.15s ease, color 0.15s ease' }}>
+                {/* Width tracks the button (capped at 44) so seven tabs never crowd
+                    into each other on a narrow phone — the nav gap stays visible. */}
+                <span style={{ position: 'relative', width: '100%', maxWidth: 44, aspectRatio: '1', borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? colors.ink : colors.bgAlt, color: active ? '#fff' : colors.inkSoft, transition: 'background 0.15s ease, color 0.15s ease' }}>
                   {tabIcon(t)}
                   {t === 'notes' && dueNotes.some((n) => daysFromToday(n.category) <= 0) && (
                     <span style={{ position: 'absolute', top: 3, right: 3, width: 9, height: 9, borderRadius: '50%', background: colors.accent, border: `2px solid ${active ? colors.ink : colors.bgAlt}` }} />
@@ -2014,9 +2018,19 @@ export default function Home() {
 
         {/* Coming up — anything with a reminder date that isn't ticked off yet.
             Sits above whichever tab you're on so it can't be missed. */}
-        {loaded && dueNotes.length > 0 && (
+        {loaded && dueNotes.length > 0 && !comingUpHidden && (
           <div style={{ background: colors.bgAlt, borderRadius: 14, padding: '12px 14px', marginBottom: 16 }}>
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 8 }}>Coming up</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600 }}>Coming up</div>
+              <button
+                type="button"
+                onClick={() => setComingUpHidden(true)}
+                title="Hide until you next open the app"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0 2px 10px', fontSize: 12, fontWeight: 700, color: colors.inkFaint, letterSpacing: '0.02em' }}
+              >
+                Hide
+              </button>
+            </div>
             {dueNotes.slice(0, 4).map((n) => (
               <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
                 <button
@@ -2463,12 +2477,49 @@ export default function Home() {
                       {c.label}
                     </button>
                   ))}
-                  <input
-                    type="date"
-                    value={noteDue}
-                    onChange={(e) => setNoteDue(e.target.value)}
-                    style={{ ...inputStyle, marginBottom: 0, width: 'auto', minWidth: 0, flex: '1 1 96px', padding: '7px 9px', fontSize: 12.5 }}
-                  />
+                  {/* A bare date input renders as an empty grey box that doesn't look
+                      tappable, so we show a proper chip and lay the real input over it
+                      invisibly — tapping anywhere on the chip opens the date picker. */}
+                  {(() => {
+                    const preset = [todayISO(), isoPlus(1), isoPlus(7)].includes(noteDue);
+                    const picked = noteDue && !preset;
+                    return (
+                      <div style={{ position: 'relative', flex: '0 0 auto' }}>
+                        <div
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                            border: picked ? `1.5px solid ${colors.ink}` : `1.5px solid ${colors.line}`,
+                            background: picked ? colors.ink : '#fff',
+                            color: picked ? '#fff' : colors.inkSoft,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
+                            <rect x="3" y="5" width="18" height="16" rx="2" />
+                            <path d="M16 3v4M8 3v4M3 11h18" />
+                          </svg>
+                          {picked ? dueLabel(noteDue) : 'Pick a date'}
+                        </div>
+                        <input
+                          type="date"
+                          value={noteDue}
+                          aria-label="Pick a reminder date"
+                          onChange={(e) => setNoteDue(e.target.value)}
+                          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, border: 'none', padding: 0, margin: 0, cursor: 'pointer' }}
+                        />
+                      </div>
+                    );
+                  })()}
+                  {noteDue && (
+                    <button
+                      type="button"
+                      onClick={() => setNoteDue('')}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: colors.inkFaint, padding: '6px 2px' }}
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
 
                 <button
@@ -2567,13 +2618,22 @@ export default function Home() {
 
                       {!n.category && !done && (
                         <div style={{ paddingLeft: 34, marginTop: 10 }}>
-                          <input
-                            type="date"
-                            value=""
-                            onChange={(e) => { if (e.target.value) patchNote(n, { category: e.target.value }); }}
-                            title="Add a reminder date"
-                            style={{ ...inputStyle, marginBottom: 0, width: 'auto', padding: '6px 10px', fontSize: 12, color: colors.inkFaint }}
-                          />
+                          <div style={{ position: 'relative', display: 'inline-block' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999, border: `1.5px solid ${colors.line}`, background: '#fff', fontSize: 12, fontWeight: 600, color: colors.inkSoft, whiteSpace: 'nowrap' }}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
+                                <rect x="3" y="5" width="18" height="16" rx="2" />
+                                <path d="M16 3v4M8 3v4M3 11h18" />
+                              </svg>
+                              Add a reminder
+                            </div>
+                            <input
+                              type="date"
+                              value=""
+                              aria-label="Add a reminder date to this note"
+                              onChange={(e) => { if (e.target.value) patchNote(n, { category: e.target.value }); }}
+                              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, border: 'none', padding: 0, margin: 0, cursor: 'pointer' }}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
