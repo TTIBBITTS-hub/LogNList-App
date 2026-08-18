@@ -175,6 +175,55 @@ function listingShareText(item) {
   return lines.join('\n');
 }
 
+// ── Reminder dates ─────────────────────────────────────────
+// Dates are stored as plain 'YYYY-MM-DD' strings and compared as strings, so
+// nothing shifts around when the clocks change or the phone's timezone differs.
+function todayISO() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function isoPlus(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function daysFromToday(iso) {
+  if (!iso) return null;
+  const [y, m, d] = String(iso).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const then = new Date(y, m - 1, d);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((then - today) / 86400000);
+}
+
+// "Overdue by 2 days", "Today", "Tomorrow", "Fri 21 Aug".
+function dueLabel(iso) {
+  const n = daysFromToday(iso);
+  if (n === null) return '';
+  if (n < -1) return `Overdue by ${Math.abs(n)} days`;
+  if (n === -1) return 'Overdue by a day';
+  if (n === 0) return 'Today';
+  if (n === 1) return 'Tomorrow';
+  const [y, m, d] = String(iso).split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const day = dt.toLocaleDateString('en-NZ', { weekday: 'short' });
+  const mon = dt.toLocaleDateString('en-NZ', { month: 'short' });
+  return `${day} ${d} ${mon}`;
+}
+
+function dueColour(iso) {
+  const n = daysFromToday(iso);
+  if (n === null) return colors.inkFaint;
+  if (n < 0) return colors.accent;
+  if (n === 0) return colors.ink;
+  return colors.inkSoft;
+}
+
 // Share + copy icons that sit in the top-right corner of a write-up card.
 const writeupIconBtn = {
   width: 34,
@@ -223,6 +272,13 @@ export default function Home() {
   const [logDocument, setLogDocument] = useState(null); // {name, dataUrl, mime}
   const [searchQuery, setSearchQuery] = useState('');
   const [listening, setListening] = useState(null);
+
+  // Notes tab
+  const [noteText, setNoteText] = useState('');
+  const [noteDue, setNoteDue] = useState('');
+  const [notePhotos, setNotePhotos] = useState([null, null, null]);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteFilter, setNoteFilter] = useState('open'); // 'open' | 'all'
 
   function startVoice(field, setter) {
     const Ctor =
@@ -283,9 +339,18 @@ export default function Home() {
     return (f.category !== '' && f.category != null && !isNaN(n)) ? n : 1e9;
   };
   const files = items.filter((i) => i.type === 'file').sort((a, b) => filePos(a) - filePos(b));
-  const realItems = items.filter((i) => i.type !== 'file' && i.type !== 'book');
+  const realItems = items.filter((i) => i.type !== 'file' && i.type !== 'book' && i.type !== 'note');
   const books = items.filter((i) => i.type === 'book');
-  const findableItems = items.filter((i) => i.type !== 'file');
+  const findableItems = items.filter((i) => i.type !== 'file' && i.type !== 'note');
+
+  // ── Notes ──────────────────────────────────────────────
+  // A note is just an item with type 'note'. The body lives in `notes`, the
+  // optional reminder date in `category` (unused on notes otherwise), and
+  // ticking one off sets status to 'done'.
+  const noteList = items.filter((i) => i.type === 'note');
+  const dueNotes = noteList
+    .filter((n) => n.category && n.status !== 'done')
+    .sort((a, b) => String(a.category).localeCompare(String(b.category)));
   const unfiledItems = realItems.filter((i) => !i.file_id);
   const itemsInFile = (fileId) =>
     realItems.filter((i) => String(i.file_id || '') === String(fileId));
@@ -914,6 +979,91 @@ export default function Home() {
       setNotice(`${label} copied` + (n ? ` and ${n} photo${n === 1 ? '' : 's'} saved to your downloads.` : '.'));
     } else {
       setError("Couldn't share on this device \u2014 select the text and copy it manually.");
+    }
+  }
+
+  // ── Notes ──────────────────────────────────────────────
+  async function handleNotePhoto(e, slot) {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const dataUrl = await compressImage(file);
+      setNotePhotos((prev) => {
+        const next = [...prev];
+        next[slot] = dataUrl;
+        return next;
+      });
+    } catch (err) {
+      setError("Couldn't use that photo: " + err.message);
+    }
+  }
+
+  function removeNotePhoto(slot) {
+    setNotePhotos((prev) => {
+      const next = [...prev];
+      next[slot] = null;
+      return next;
+    });
+  }
+
+  async function saveNote() {
+    const body = noteText.trim();
+    const pics = notePhotos.filter(Boolean);
+    if (!body && !pics.length) {
+      setError('Write something or add a photo first.');
+      return;
+    }
+    setNoteSaving(true);
+    setError(null);
+    try {
+      // First line doubles as the note's title everywhere else in the app.
+      const firstLine = (body.split('\n').find((l) => l.trim()) || 'Note').trim();
+      const res = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'note',
+          name: firstLine.slice(0, 80),
+          notes: body,
+          category: noteDue || '',
+          photos: pics,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setNoteText('');
+      setNoteDue('');
+      setNotePhotos([null, null, null]);
+      setNotice(noteDue ? 'Noted — it’ll show up in Coming up.' : 'Noted.');
+      await loadItems();
+    } catch (err) {
+      setError("Couldn't save that note: " + err.message);
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
+  async function patchNote(note, patch) {
+    try {
+      const res = await fetch(`/api/items/${note.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      await loadItems();
+    } catch (err) {
+      setError("Couldn't update that note: " + err.message);
+    }
+  }
+
+  async function deleteNote(note) {
+    try {
+      await fetch(`/api/items/${note.id}`, { method: 'DELETE' });
+      await loadItems();
+    } catch (err) {
+      setError("Couldn't delete that note: " + err.message);
     }
   }
 
@@ -1823,6 +1973,7 @@ export default function Home() {
           {[
             { key: 'log', label: 'Log it' },
             { key: 'inventory', label: 'Silo' },
+            { key: 'notes', label: 'Notes' },
             { key: 'library', label: 'Library' },
             { key: 'fileit', label: 'File-it' },
             { key: 'find', label: 'Find it' },
@@ -1840,8 +1991,11 @@ export default function Home() {
                 }}
                 style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}
               >
-                <span style={{ width: 44, height: 44, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? colors.ink : colors.bgAlt, color: active ? '#fff' : colors.inkSoft, transition: 'background 0.15s ease, color 0.15s ease' }}>
+                <span style={{ position: 'relative', width: 44, height: 44, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? colors.ink : colors.bgAlt, color: active ? '#fff' : colors.inkSoft, transition: 'background 0.15s ease, color 0.15s ease' }}>
                   {tabIcon(t)}
+                  {t === 'notes' && dueNotes.some((n) => daysFromToday(n.category) <= 0) && (
+                    <span style={{ position: 'absolute', top: 3, right: 3, width: 9, height: 9, borderRadius: '50%', background: colors.accent, border: `2px solid ${active ? colors.ink : colors.bgAlt}` }} />
+                  )}
                 </span>
                 <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.01em', color: active ? colors.ink : colors.inkFaint }}>
                   {tItem.label}
@@ -1857,6 +2011,35 @@ export default function Home() {
         {notice && <p style={{ color: colors.success, fontSize: 13, marginBottom: 14, fontWeight: 600 }}>{notice}</p>}
 
         {!loaded && <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 40 }}>Loading...</p>}
+
+        {/* Coming up — anything with a reminder date that isn't ticked off yet.
+            Sits above whichever tab you're on so it can't be missed. */}
+        {loaded && dueNotes.length > 0 && (
+          <div style={{ background: colors.bgAlt, borderRadius: 14, padding: '12px 14px', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.inkFaint, fontWeight: 600, marginBottom: 8 }}>Coming up</div>
+            {dueNotes.slice(0, 4).map((n) => (
+              <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+                <button
+                  type="button"
+                  className="act"
+                  onClick={() => patchNote(n, { status: 'done' })}
+                  title="Tick it off"
+                  aria-label="Tick it off"
+                  style={{ flex: '0 0 auto', width: 22, height: 22, borderRadius: '50%', border: `1.5px solid ${colors.line}`, background: '#fff', cursor: 'pointer', padding: 0 }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.name || 'Note'}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: dueColour(n.category) }}>{dueLabel(n.category)}</div>
+                </div>
+              </div>
+            ))}
+            {dueNotes.length > 4 && (
+              <button type="button" onClick={() => setTab('notes')} style={{ background: 'none', border: 'none', padding: '6px 0 0', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: colors.inkSoft }}>
+                +{dueNotes.length - 4} more &#8594;
+              </button>
+            )}
+          </div>
+        )}
 
         {loaded && tab === 'log' && (
           <div>
@@ -2225,6 +2408,182 @@ export default function Home() {
             </div>
           </div>
         )}
+        {loaded && tab === 'notes' && (() => {
+          const shownNotes = noteFilter === 'open' ? noteList.filter((n) => n.status !== 'done') : noteList;
+          return (
+            <div>
+              {/* Write one */}
+              <div style={{ background: colors.bgAlt, borderRadius: 16, padding: 14, marginBottom: 18 }}>
+                <div style={fieldWrap}>
+                  <textarea
+                    placeholder="Talk or type — what do you want to remember?"
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    style={{ ...micInputStyle, minHeight: 96, resize: 'vertical', display: 'block' }}
+                  />
+                  <MicButton textarea active={listening === 'note'} onClick={() => startVoice('note', setNoteText)} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                  {[0, 1, 2].map((slot) => (
+                    <div key={slot} style={{ position: 'relative', aspectRatio: '1' }}>
+                      <label style={{ display: 'block', width: '100%', height: '100%', background: '#fff', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', border: `1.5px solid ${colors.line}` }}>
+                        {notePhotos[slot] ? (
+                          <img src={notePhotos[slot]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: colors.inkFaint, fontWeight: 500 }}>Photo</div>
+                        )}
+                        <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => handleNotePhoto(e, slot)} />
+                      </label>
+                      {notePhotos[slot] && (
+                        <button type="button" onClick={() => removeNotePhoto(slot)} title="Remove this photo" aria-label="Remove this photo" style={photoRemoveBtn}>&times;</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ fontSize: 12, color: colors.inkFaint, fontWeight: 600, marginBottom: 6 }}>Remind me</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Today', v: todayISO() },
+                    { label: 'Tomorrow', v: isoPlus(1) },
+                    { label: 'Next week', v: isoPlus(7) },
+                  ].map((c) => (
+                    <button
+                      key={c.label}
+                      type="button"
+                      onClick={() => setNoteDue(noteDue === c.v ? '' : c.v)}
+                      style={{
+                        padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        border: noteDue === c.v ? `1.5px solid ${colors.ink}` : `1.5px solid ${colors.line}`,
+                        background: noteDue === c.v ? colors.ink : '#fff',
+                        color: noteDue === c.v ? '#fff' : colors.inkSoft,
+                      }}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                  <input
+                    type="date"
+                    value={noteDue}
+                    onChange={(e) => setNoteDue(e.target.value)}
+                    style={{ ...inputStyle, marginBottom: 0, width: 'auto', minWidth: 0, flex: '1 1 96px', padding: '7px 9px', fontSize: 12.5 }}
+                  />
+                </div>
+
+                <button
+                  className="act"
+                  onClick={saveNote}
+                  disabled={noteSaving}
+                  style={{ ...primaryBtn, opacity: noteSaving ? 0.6 : 1 }}
+                >
+                  {noteSaving ? 'Saving…' : 'Save note'}
+                </button>
+                <p style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', margin: '10px 0 0', lineHeight: 1.5 }}>
+                  A date is optional — leave it off and it’s just a note. Add one and it turns up in Coming up.
+                </p>
+              </div>
+
+              {/* Read them back */}
+              {noteList.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, background: colors.bgAlt, borderRadius: 999, padding: 4, marginBottom: 14 }}>
+                  {[{ key: 'open', label: 'Open' }, { key: 'all', label: 'All' }].map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setNoteFilter(f.key)}
+                      style={{
+                        flex: 1, padding: '9px 4px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+                        background: noteFilter === f.key ? colors.ink : 'transparent',
+                        color: noteFilter === f.key ? '#fff' : colors.inkFaint,
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {shownNotes.length === 0 ? (
+                <p style={{ color: colors.inkFaint, textAlign: 'center', marginTop: 30, fontSize: 13.5, lineHeight: 1.6 }}>
+                  {noteList.length === 0
+                    ? 'Nothing noted yet. This is the pad for the stuff you’d otherwise forget by the time you’re back at the car.'
+                    : 'Nothing open — everything’s ticked off.'}
+                </p>
+              ) : (
+                shownNotes.map((n) => {
+                  const done = n.status === 'done';
+                  return (
+                    <div key={n.id} style={{ background: colors.bgAlt, borderRadius: 14, padding: 14, marginBottom: 10, opacity: done ? 0.6 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                        <button
+                          type="button"
+                          className="act"
+                          onClick={() => patchNote(n, { status: done ? 'logged' : 'done' })}
+                          title={done ? 'Put it back' : 'Tick it off'}
+                          aria-label={done ? 'Put it back' : 'Tick it off'}
+                          style={{
+                            flex: '0 0 auto', width: 24, height: 24, marginTop: 1, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                            border: done ? `1.5px solid ${colors.success}` : `1.5px solid ${colors.line}`,
+                            background: done ? colors.success : '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >
+                          {done && (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+                              <path d="M4 12.5l5 5L20 6.5" />
+                            </svg>
+                          )}
+                        </button>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap', textDecoration: done ? 'line-through' : 'none' }}>{n.notes || n.name}</div>
+                          {n.category && (
+                            <div style={{ fontSize: 12, fontWeight: 700, marginTop: 6, color: done ? colors.inkFaint : dueColour(n.category) }}>
+                              {dueLabel(n.category)}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { if (confirm('Delete this note?')) deleteNote(n); }}
+                          title="Delete this note"
+                          aria-label="Delete this note"
+                          style={{ flex: '0 0 auto', background: 'none', border: 'none', cursor: 'pointer', color: colors.inkFaint, padding: 2, lineHeight: 1 }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+                            <path d="M3 6h18" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {(n.photos || []).length > 0 && (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10, paddingLeft: 34, overflowX: 'auto' }}>
+                          {(n.photos || []).map((p, i) => (
+                            <img key={i} src={p} alt="" style={{ flex: '0 0 auto', width: 68, height: 68, objectFit: 'cover', borderRadius: 10, border: `1px solid ${colors.line}` }} />
+                          ))}
+                        </div>
+                      )}
+
+                      {!n.category && !done && (
+                        <div style={{ paddingLeft: 34, marginTop: 10 }}>
+                          <input
+                            type="date"
+                            value=""
+                            onChange={(e) => { if (e.target.value) patchNote(n, { category: e.target.value }); }}
+                            title="Add a reminder date"
+                            style={{ ...inputStyle, marginBottom: 0, width: 'auto', padding: '6px 10px', fontSize: 12, color: colors.inkFaint }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })()}
+
         {loaded && tab === 'library' && (() => {
           const q = librarySearch.trim().toLowerCase();
           const shown = q
@@ -3517,6 +3876,9 @@ function tabIcon(key) {
   }
   if (key === 'find') {
     return (<svg {...p}><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>);
+  }
+  if (key === 'notes') {
+    return (<svg {...p}><path d="M4 4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /><path d="M14 2v6h6" /><path d="M8 13h8" /><path d="M8 17h5" /></svg>);
   }
   return (<svg {...p}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3M14 17v3M17 17h3v3M20 14v.01" /></svg>);
 }
